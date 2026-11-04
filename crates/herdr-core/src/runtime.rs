@@ -129,6 +129,13 @@ impl State {
     pub fn current(&self) -> Option<&Link> {
         self.holders.iter().find(|l| l.current)
     }
+
+    /// The screen can no longer back cached or in-flight verdicts (fork):
+    /// forget pending detection for `id` and bump its invalidation
+    /// generation so a snapshot taken before this dies at commit.
+    pub fn invalidate_screen(&mut self, id: u32) {
+        self.screen_status.entry(id).or_default().invalidate();
+    }
 }
 
 impl Link {
@@ -734,7 +741,7 @@ impl Core {
             v.conn.with(|out| out.finish(v.channel, end.to_string().as_bytes()));
         }
         st.relays.remove(&id);
-        st.screen_status.remove(&id);
+        st.invalidate_screen(id);
         if let Some(snapshot) = st.screens.remove(&id).and_then(|s| s.snapshot())
             && let Err(e) = write_atomic(&self.snapshot_path(id), &snapshot)
         {

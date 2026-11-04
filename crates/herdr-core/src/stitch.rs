@@ -202,7 +202,7 @@ impl Core {
         let result = self.scroll_and_read(id, lines).await;
         let mut st = self.lock();
         st.stitching.remove(&id);
-        st.screen_status.remove(&id);
+        st.invalidate_screen(id);
         let held = st.gates.entry(id).or_default().set_busy(false);
         if let Some(link) = st.link(id) {
             link.input(id, &held);

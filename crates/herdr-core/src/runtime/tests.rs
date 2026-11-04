@@ -783,7 +783,7 @@ async fn synchronized_output_and_stitching_freeze_detection() {
     {
         let mut st = core.lock();
         st.stitching.remove(&id);
-        st.screen_status.remove(&id);
+        st.invalidate_screen(id);
     }
     core.screen_status_pass(&catalog).await;
     assert_eq!(word(&core, id).as_deref(), Some("blocked"));
@@ -811,6 +811,62 @@ async fn a_resize_stales_the_token_and_drops_the_pending_settle() {
         core.screen_status_commit(&catalog, snap, detection);
     }
     assert_eq!(word(&core, id), None, "a resized screen makes the verdict stale");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_resize_there_and_back_still_kills_the_verdict() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    // Narrower and straight back with no output: dimensions and output_seq
+    // end identical, yet the invalidation generation moved — the verdict
+    // the old screen produced must still die at commit.
+    for (cols, rows) in [(100, 40), (80, 24)] {
+        let mut st = core.lock();
+        st.screens.get_mut(&id).unwrap().resize(cols, rows);
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        t.cols = cols;
+        t.rows = rows;
+        st.invalidate_screen(id);
+    }
+    for (snap, detection) in crate::screen_status::evaluate(snaps) {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    assert_eq!(word(&core, id), None, "an invalidated verdict dies even when the token fields match again");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_foreground_there_and_back_still_kills_the_verdict() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    // devin → bash → the same devin: the foreground token ends identical,
+    // yet both changes bumped the generation — the verdict still dies.
+    {
+        let mut st = core.lock();
+        let devin = st.reg.terminals[&id].foreground.clone();
+        let was = st.reg.terminals.get_mut(&id).unwrap().foreground.replace(agent("bash"));
+        core.foreground_changed(&mut st, id, was.as_ref());
+        let was = st.reg.terminals.get_mut(&id).unwrap().foreground.replace(devin.unwrap());
+        core.foreground_changed(&mut st, id, was.as_ref());
+    }
+    for (snap, detection) in crate::screen_status::evaluate(snaps) {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    assert_eq!(word(&core, id), None, "a foreground excursion kills the in-flight verdict");
+    // And the next pass still detects on the current screen.
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"));
     drop(core);
     remove_root(&root);
 }
@@ -868,7 +924,9 @@ async fn foreground_loss_and_replacement_withdraw_never_done() {
         core.foreground_changed(&mut st, id, was.as_ref());
     }
     assert_eq!(word(&core, id), None, "a new foreground owns the screen now");
-    assert!(!core.lock().screen_status.contains_key(&id));
+    // The watch entry stays — its invalidation generation must outlive the
+    // change so a verdict snapshotted before it still dies at commit.
+    assert!(core.lock().screen_status.contains_key(&id));
     core.screen_status_pass(&catalog).await;
     assert_eq!(word(&core, id), None, "a shell is never inferred");
 

@@ -15,7 +15,9 @@ use crate::runtime::{Core, State};
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
-/// Per-terminal worker state, kept in `State::screen_status`.
+/// Per-terminal worker state, kept in `State::screen_status`. The entry
+/// lives as long as the terminal: `State::remove` is the only delete, so
+/// `generation` never resets while a terminal exists.
 #[derive(Default)]
 pub struct ScreenWatch {
     /// The `output_seq` whose snapshot was last evaluated to a verdict.
@@ -23,6 +25,20 @@ pub struct ScreenWatch {
     /// When the current run of idle evidence began; `settle` runs from here.
     /// Cleared by any other verdict, by sync output, or by invalidation.
     idle_since: Option<Instant>,
+    /// The invalidation generation. Part of the commit token, so a snapshot
+    /// taken before a bump dies at commit even when its other fields happen
+    /// to match again — a resize there and back, a foreground A→B→A.
+    generation: u64,
+}
+
+impl ScreenWatch {
+    /// The screen can no longer back cached or in-flight verdicts: forget
+    /// pending work and move the generation so they die at commit.
+    pub fn invalidate(&mut self) {
+        self.last_seq = None;
+        self.idle_since = None;
+        self.generation = self.generation.wrapping_add(1);
+    }
 }
 
 /// What must still be true at commit for a verdict to apply: the same
@@ -40,6 +56,10 @@ struct Token {
     size: (u16, u16),
     /// The manifest generation: its `Arc` address while the catalog lives.
     manifest: usize,
+    /// The terminal's invalidation generation at snapshot: any later bump —
+    /// redraws aside, resize, stitch, foreground or agent change, a native
+    /// report, program end — means the screen the rules saw is gone.
+    generation: u64,
 }
 
 /// One terminal's owned snapshot, taken under one lock and evaluated off it.
@@ -152,13 +172,15 @@ impl Core {
             // Gone, holderless, or no supported agent in front: whatever the
             // screen said about the old program is withdrawn — never "done".
             self.inferred_status(st, id, None);
-            st.screen_status.remove(&id);
+            if let Some(w) = st.screen_status.get_mut(&id) {
+                w.invalidate();
+            }
             return None;
         }
         if reported {
-            // Native authority owns the root now; inference stays off for
-            // this program's lifetime.
-            st.screen_status.remove(&id);
+            // Native authority owns the root now; `report_status` already
+            // invalidated on the report, and inference stays off for the
+            // program's lifetime.
             return None;
         }
         if st.stitching.contains(&id) {
@@ -166,17 +188,13 @@ impl Core {
             return None;
         }
         let agent = agent.expect("checked above");
-        let Some(manifest) = catalog.get(agent) else {
-            st.screen_status.remove(&id);
-            return None;
-        };
-        let Some((sync, size)) = st.screens.get(&id).map(|s| (s.dec_mode(2026), s.size())) else {
-            st.screen_status.remove(&id);
-            return None;
-        };
+        let manifest = catalog.get(agent)?;
+        let (sync, size) = st.screens.get(&id).map(|s| (s.dec_mode(2026), s.size()))?;
         if sync {
             // Synchronized output: mid-batch rows are not evidence.
-            st.screen_status.entry(id).or_default().idle_since = None;
+            if let Some(w) = st.screen_status.get_mut(&id) {
+                w.idle_since = None;
+            }
             return None;
         }
         let seq = st.output_seq.get(&id).copied().unwrap_or(0);
@@ -196,10 +214,11 @@ impl Core {
             }
             return None;
         }
+        let generation = st.screen_status.get(&id).map_or(0, |w| w.generation);
         let screen = st.screens.get(&id).expect("checked above");
         Some(Snap {
             id,
-            token: Token { program, foreground, seq, size, manifest: Arc::as_ptr(&manifest) as usize },
+            token: Token { program, foreground, seq, size, manifest: Arc::as_ptr(&manifest) as usize, generation },
             manifest,
             rows: screen.screen_rows(),
             title: screen.title(),
@@ -219,6 +238,7 @@ impl Core {
             seq: st.output_seq.get(&snap.id).copied().unwrap_or(0),
             size: st.screens.get(&snap.id).map_or((0, 0), |s| s.size()),
             manifest: agent.and_then(|a| catalog.get(a)).map_or(0, |m| Arc::as_ptr(&m) as usize),
+            generation: st.screen_status.get(&snap.id).map_or(0, |w| w.generation),
         };
         let eligible = t.is_live()
             && !t.reported
@@ -279,7 +299,7 @@ impl Core {
         if key(was) == key(st.reg.terminals.get(&id).and_then(|t| t.foreground.as_ref())) {
             return;
         }
-        st.screen_status.remove(&id);
+        st.invalidate_screen(id);
         self.inferred_status(st, id, None);
     }
 }
