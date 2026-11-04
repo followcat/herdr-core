@@ -792,6 +792,30 @@ async fn synchronized_output_and_stitching_freeze_detection() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn removal_during_a_stitch_never_recreates_its_watch() {
+    let (core, root) = test_core();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    core.lock().stitching.insert(id);
+    // While the read is off scrolling, the terminal ends and is forgotten.
+    {
+        let mut st = core.lock();
+        core.record_finish(&mut st, id, Exit { code: Some(0), signal: None }, "exited");
+        core.remove(&mut st, id);
+        assert!(!st.screen_status.contains_key(&id));
+    }
+    // What stitch.rs does when its scroll ends, whatever happened meanwhile.
+    {
+        let mut st = core.lock();
+        st.stitching.remove(&id);
+        st.invalidate_screen(id);
+        assert!(!st.screen_status.contains_key(&id), "invalidating a removed terminal must not recreate its watch");
+    }
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_resize_stales_the_token_and_drops_the_pending_settle() {
     let (core, root) = test_core();
     let catalog = test_detect_catalog();

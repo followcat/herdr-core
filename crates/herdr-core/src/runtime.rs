@@ -133,8 +133,12 @@ impl State {
     /// The screen can no longer back cached or in-flight verdicts (fork):
     /// forget pending detection for `id` and bump its invalidation
     /// generation so a snapshot taken before this dies at commit.
+    /// A removed terminal has no watch to invalidate — never recreate one
+    /// here (a stitch completing after removal is the caller that did).
     pub fn invalidate_screen(&mut self, id: u32) {
-        self.screen_status.entry(id).or_default().invalidate();
+        if self.reg.terminals.contains_key(&id) {
+            self.screen_status.entry(id).or_default().invalidate();
+        }
     }
 }
 
