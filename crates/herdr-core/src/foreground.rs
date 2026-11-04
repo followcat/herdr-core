@@ -167,9 +167,10 @@ impl Core {
                 if let Some(f) = &now {
                     t.last_cwd = Some(f.cwd.clone());
                 }
-                t.foreground = now.clone();
+                let was = std::mem::replace(&mut t.foreground, now.clone());
                 self.save_soon();
                 self.emit(&mut st, "foreground", id, serde_json::to_value(&now).unwrap_or_default());
+                self.foreground_changed(&mut st, id, was.as_ref());
             }
         }
     }

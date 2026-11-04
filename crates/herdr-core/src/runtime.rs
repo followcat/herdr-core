@@ -73,6 +73,8 @@ pub struct State {
     /// The last stitched read per terminal, good while it prints nothing:
     /// (output count after it, what it captured).
     pub stitched: HashMap<u32, (u64, crate::stitch::Capture)>,
+    /// Per-terminal screen-detection state for `watch_screen_status` (fork).
+    pub screen_status: HashMap<u32, crate::screen_status::ScreenWatch>,
     /// Every holder we talk to: one of our build takes new terminals, older ones drain.
     pub holders: Vec<Link>,
     pub pending: HashMap<u32, oneshot::Sender<Result<crate::terminals::Terminal, String>>>,
@@ -729,6 +731,7 @@ impl Core {
             v.conn.with(|out| out.finish(v.channel, end.to_string().as_bytes()));
         }
         st.relays.remove(&id);
+        st.screen_status.remove(&id);
         if let Some(snapshot) = st.screens.remove(&id).and_then(|s| s.snapshot())
             && let Err(e) = write_atomic(&self.snapshot_path(id), &snapshot)
         {
@@ -766,6 +769,7 @@ impl Core {
     pub fn remove(&self, st: &mut State, id: u32) {
         // Gone before it is announced: a fresh snapshot for a subscriber that
         // fell behind must not bring it back.
+        st.screen_status.remove(&id);
         let Some(was) = st.reg.terminals.remove(&id) else { return };
         self.emit_from(st, "removed", id, serde_json::json!({}), Some(&was));
         let _ = std::fs::remove_file(self.snapshot_path(id));

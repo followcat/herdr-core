@@ -8,12 +8,12 @@ show `working`/`blocked`/`idle` and unblock waits.
 Nothing here replaces 7501. A program that reports status keeps full control of
 its own status; the screen is only a fallback.
 
-> **Phase 1 ships the machinery, not the runtime.** What exists today: the
-> bundled rule manifests, the pure evaluation engine (`detect::detect`), the
-> foreground-agent identifier (`detect::identify`) and the override catalog.
-> Nothing samples screens, calls these on a timer, or publishes statuses yet.
-> The runtime behavior below is the phase-2 contract the pieces already obey —
-> described here so the semantics are reviewable before the wiring lands.
+> **Ships:** the bundled rule manifests, the pure evaluation engine
+> (`detect::detect`), the foreground-agent identifier (`detect::identify`),
+> the override catalog, the inferred/native arbitration (`status::apply_inferred`,
+> `Status.source`) and the detection worker (`watch_screen_status`). Runtime
+> recovery for inferred state (adoption, handover, kept replacement) is phase
+> 2b and not wired yet.
 
 ## Three separate facts
 
@@ -37,11 +37,12 @@ Keep these apart; conflating them is where wrong behavior hides.
   through the same `status_changed` path as a native report. Inferred
   records carry `"source": "screen"`; native records have no `source` field.
   The field is an additive generation-1 extension: old clients ignore it and
-  `released.openrpc.json` stays compatible. Phase 2 therefore moves the
-  *availability* checks that today read `reported` — input observation
-  (`input.rs`) and note delivery (`notes.rs::can_take_note`) — onto "native
-  or inferred status": a silent agent whose screen says it is working can
-  observe its input and take a note just like a reporting one.
+  `released.openrpc.json` stays compatible. The *availability* checks that
+  used to read `reported` — input observation (`input.rs`), `wait`
+  (`wait.rs`), note delivery (`notes.rs::can_take_note`) and template
+  first-message readiness — now read "native or inferred status"
+  (`Terminal::status_available`): a silent agent whose screen says it is
+  working can observe its input and take a note just like a reporting one.
 - **Interrupt-key selection.** `reported` stays what it means — "the program
   itself reported" — and keeps deciding which key interrupts a program and
   whether a program claims input. Inference never sets `reported`, so an
@@ -125,10 +126,16 @@ ignored.
   reported 7501, inference stays off for the shell's whole life; a later
   silent agent in the same shell is not detected. Fixing that needs an
   explicit agent-session concept (phase 2+).
-- **Sampling (phase 2).** The planned loop reads the screen about every
-  500 ms; transitions shorter than that may be missed or published late.
-  Inferred `idle` may also wait for a settle check so a redraw between tool
-  calls does not flap.
+- **Sampling.** `watch_screen_status` reads eligible screens about every
+  500 ms (`HC_DETECT_MS`); transitions shorter than that may be missed or
+  published late. Working and blocked publish at once; inferred `idle`
+  waits for a 1.5 s settle deadline (`HC_DETECT_SETTLE_MS`) so a redraw
+  between tool calls does not flap — an unchanged screen confirms it
+  without re-evaluating, and `unknown` never times out into `idle`.
+  Evaluation happens off the runtime lock; a verdict commits only if the
+  screen, program, foreground and manifest it was read from are unchanged.
+  Resize, stitch completion, a foreground/agent change or a native report
+  invalidate pending work; a cwd move alone does not.
 - **Foreground is leader-only.** hc probes the foreground process group's
   leader, not every job member. Agents hidden behind intermediate launchers
   the leader doesn't name are simply not detected.

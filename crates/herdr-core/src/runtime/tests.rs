@@ -598,6 +598,332 @@ fn a_viewers_paint_replays_native_status_never_inferred() {
     remove_root(&root);
 }
 
+// --- screen_status worker (fork) ----------------------------------------
+
+/// A manifest that maps marker strings to verdicts, loaded as a `devin`
+/// override so `identify` and the catalog meet on the same canonical id.
+const TEST_MANIFEST: &str = r#"
+id = "devin"
+
+[[rules]]
+id = "marks_viewer"
+state = "unknown"
+skip_state_update = true
+priority = 300
+region = "whole_recent"
+contains = ["TRANSCRIPT VIEW"]
+
+[[rules]]
+id = "marks_blocked"
+state = "blocked"
+kind = "permission"
+priority = 200
+region = "whole_recent"
+contains = ["NEED YES"]
+
+[[rules]]
+id = "marks_working"
+state = "working"
+priority = 100
+region = "whole_recent"
+contains = ["WORKING NOW"]
+
+[[rules]]
+id = "marks_idle"
+state = "idle"
+priority = 50
+region = "whole_recent"
+contains = ["READY>"]
+"#;
+
+fn test_detect_catalog() -> crate::detect::Catalog {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "hc-detect-test-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("devin.toml"), TEST_MANIFEST).unwrap();
+    let catalog = crate::detect::Catalog::load(Some(&dir), None);
+    let _ = std::fs::remove_dir_all(&dir);
+    catalog
+}
+
+fn agent(name: &str) -> crate::foreground::Foreground {
+    crate::foreground::Foreground { pid: 100, name: name.into(), argv: vec![name.into()], cwd: "/work".into() }
+}
+
+/// A live terminal on a fake holder whose foreground identifies as `agent`.
+fn screen_agent(core: &Core, name: &str) -> (u32, mpsc::Receiver<Vec<u8>>) {
+    let (id, frames) = terminal_on_fake_holder(core);
+    core.lock().reg.terminals.get_mut(&id).unwrap().foreground = Some(agent(name));
+    (id, frames)
+}
+
+fn word(core: &Core, id: u32) -> Option<String> {
+    core.lock().reg.terminals[&id].status.as_ref().map(|s| s.state.clone())
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_screen_blocker_publishes_at_once_working_too() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    core.screen_status_pass(&catalog).await;
+    {
+        let st = core.lock();
+        let status = st.reg.terminals[&id].status.as_ref().unwrap();
+        assert_eq!(status.state, "blocked");
+        assert_eq!(status.kind.as_deref(), Some("permission"));
+        assert_eq!(status.source.as_deref(), Some("screen"));
+        assert!(!st.reg.terminals[&id].reported);
+    }
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HWORKING NOW\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("working"));
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unchanged_screen_confirms_idle_past_its_deadline() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None, "idle waits for the settle deadline");
+    tokio::time::advance(Duration::from_millis(1600)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("idle"), "unchanged screen past the deadline confirms idle");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_redraw_between_snapshot_and_commit_drops_the_verdict() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HNEED YES\r\n"); // the screen moved under us
+    for (snap, detection) in crate::screen_status::evaluate(snaps) {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    assert_eq!(word(&core, id), None, "a stale verdict is rejected at commit");
+    core.screen_status_pass(&catalog).await; // next pass sees the new screen
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"));
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_native_report_between_snapshot_and_commit_wins() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    core.output(&mut core.lock(), id, b"\x1b]7501;state=working\x1b\\"); // the program spoke first
+    for (snap, detection) in crate::screen_status::evaluate(snaps) {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    let st = core.lock();
+    let status = st.reg.terminals[&id].status.as_ref().unwrap();
+    assert_eq!(status.state, "working");
+    assert!(status.source.is_none(), "the native report owns the root, not the raced verdict");
+    drop(st);
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn synchronized_output_and_stitching_freeze_detection() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    // A pending idle first.
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None);
+    // Synchronized output cancels the pending idle: mid-batch rows are not evidence.
+    tokio::time::advance(Duration::from_millis(200)).await;
+    core.output(&mut core.lock(), id, b"\x1b[?2026h");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None);
+    // Sync off again: the pending settle restarts, it did not survive at T.
+    tokio::time::advance(Duration::from_millis(100)).await;
+    core.output(&mut core.lock(), id, b"\x1b[?2026l");
+    core.screen_status_pass(&catalog).await;
+    tokio::time::advance(Duration::from_millis(1400)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None, "the sync-canceled settle restarted instead of confirming early");
+    tokio::time::advance(Duration::from_millis(200)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("idle"));
+
+    // Stitching freezes the pass entirely: no snapshot while the live view is read.
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HNEED YES\r\n");
+    core.lock().stitching.insert(id);
+    assert!(core.screen_status_collect(&catalog).is_empty(), "no snapshot while stitching");
+    // Completion invalidates the cached pass exactly like stitch.rs does.
+    {
+        let mut st = core.lock();
+        st.stitching.remove(&id);
+        st.screen_status.remove(&id);
+    }
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"));
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_resize_stales_the_token_and_drops_the_pending_settle() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    // What apply_size does to the screen and the record.
+    {
+        let mut st = core.lock();
+        st.screens.get_mut(&id).unwrap().resize(100, 40);
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        t.cols = 100;
+        t.rows = 40;
+    }
+    for (snap, detection) in crate::screen_status::evaluate(snaps) {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    assert_eq!(word(&core, id), None, "a resized screen makes the verdict stale");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn unknown_never_times_out_into_idle_and_cancels_the_pending_one() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"plain untracked text\r\n");
+    core.screen_status_pass(&catalog).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None, "unknown stays unknown forever");
+
+    // Idle pending, then unknown evidence: the pending dies with it.
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HREADY>\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None);
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[Hsomething unrecognized now\r\n");
+    core.screen_status_pass(&catalog).await;
+    tokio::time::advance(Duration::from_secs(60)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None, "the canceled pending must not confirm later");
+
+    // A skip rule (a transcript view) behaves the same: pending dies, verdict stands.
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HWORKING NOW\r\n");
+    core.screen_status_pass(&catalog).await;
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HREADY>\r\n");
+    core.screen_status_pass(&catalog).await; // starts a fresh pending idle
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HTRANSCRIPT VIEW\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("working"), "a skip leaves the published verdict alone");
+    tokio::time::advance(Duration::from_secs(60)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("working"), "skip canceled the pending too");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn foreground_loss_and_replacement_withdraw_never_done() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"WORKING NOW\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("working"));
+
+    // The agent is replaced by a plain shell: the verdict belonged to devin.
+    {
+        let mut st = core.lock();
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        let was = t.foreground.replace(agent("bash"));
+        core.foreground_changed(&mut st, id, was.as_ref());
+    }
+    assert_eq!(word(&core, id), None, "a new foreground owns the screen now");
+    assert!(!core.lock().screen_status.contains_key(&id));
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None, "a shell is never inferred");
+
+    // The foreground leaving entirely withdraws too — never means "done".
+    core.lock().reg.terminals.get_mut(&id).unwrap().foreground = Some(agent("devin"));
+    core.output(&mut core.lock(), id, b"\x1b[2J\x1b[HNEED YES\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"));
+    {
+        let mut st = core.lock();
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        let was = t.foreground.take();
+        core.foreground_changed(&mut st, id, was.as_ref());
+    }
+    assert_eq!(word(&core, id), None, "foreground loss is not completion");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_cwd_move_is_not_a_new_program() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"READY>\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id), None); // pending
+    {
+        let mut st = core.lock();
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        let mut moved = t.foreground.clone().unwrap();
+        moved.cwd = "/elsewhere".into();
+        let was = t.foreground.replace(moved);
+        core.foreground_changed(&mut st, id, was.as_ref());
+    }
+    tokio::time::advance(Duration::from_millis(1600)).await;
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("idle"), "the pending settle survived a cwd move");
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn matching_runs_off_the_runtime_lock() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    let snaps = core.screen_status_collect(&catalog);
+    assert_eq!(snaps.len(), 1);
+    // Hold the runtime lock across the whole evaluation: if matching ever
+    // needed the core state, this join would deadlock.
+    let guard = core.lock();
+    let verdicts = std::thread::spawn(move || crate::screen_status::evaluate(snaps)).join().unwrap();
+    drop(guard);
+    for (snap, detection) in verdicts {
+        core.screen_status_commit(&catalog, snap, detection);
+    }
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"));
+    drop(core);
+    remove_root(&root);
+}
+
 /// Holder threads can keep the core, and so its registry writer, alive a
 /// moment after the test drops it: a last snapshot may still land.
 fn remove_root(root: impl AsRef<std::path::Path>) {

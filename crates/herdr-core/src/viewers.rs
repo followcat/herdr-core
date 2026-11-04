@@ -191,6 +191,8 @@ impl Core {
 
     /// Applies 7501 reports and tells subscribers what changed.
     pub fn report_status(&self, st: &mut State, id: u32, reports: &[ghostty_vt::StatusReport]) {
+        // The program spoke: any pending screen inference is stale now.
+        st.screen_status.remove(&id);
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
         let mut word_changed = false;
         for r in reports {
@@ -217,7 +219,6 @@ impl Core {
     /// report — minus `reported`, which only the program's own 7501 may set.
     /// `None` withdraws the inferred root (evidence gone, foreground left).
     /// The screen worker is its caller; tests drive it directly.
-    #[cfg(test)]
     pub(crate) fn inferred_status(&self, st: &mut State, id: u32, verdict: Option<(&str, Option<&str>)>) {
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
         let was = word(st);
@@ -376,6 +377,7 @@ impl Core {
         st.screens.get_mut(&id).expect("live screen").resize(cols, rows);
         rec.cols = cols;
         rec.rows = rows;
+        st.screen_status.remove(&id);
         if let Some(link) = st.link(id) {
             link.send(&proto::json_frame(proto::RESIZE, id, &proto::Size { cols, rows }));
         }

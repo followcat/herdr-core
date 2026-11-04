@@ -26,6 +26,7 @@ pub mod releases;
 pub mod remote;
 pub mod rpc;
 pub mod runtime;
+pub mod screen_status;
 pub mod server;
 pub mod status;
 pub mod stitch;
