@@ -76,10 +76,10 @@ Inference runs only for manifests validated against captured screens:
 | manifest | foreground match | coverage |
 |---|---|---|
 | `devin` | `devin`, `devin-cli`; node entrypoints under `devin*`/`@devin*` paths | working, blocked, idle |
-| `claude` | `claude`, `claude-code` | working, blocked, idle, transcript-skip |
-| `codex` | `codex` | working, blocked; no idle rule (unknown at prompt) |
-| `opencode` | `opencode`, `open-code`, `opencode2` | working, blocked; no idle rule |
-| `command-code` | `command-code`; node entrypoints under `command-code` paths (never bare `cmd`) | blocked, idle; no working rule |
+| `claude` | `claude`, `claude-code`; `@anthropic-ai/claude-code` entrypoints | working, blocked, idle, transcript-skip |
+| `codex` | `codex`; `@openai/codex` entrypoints | working, blocked, idle (all mostly title-driven) |
+| `opencode` | `opencode`, `open-code`, `opencode2`, `opencode-ai` | working, blocked; no idle rule |
+| `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | blocked, idle; no working rule |
 
 Anything else — shells, editors, one-off tools — is not inferred at all.
 A terminal whose foreground is a plain shell or an unrecognized program has

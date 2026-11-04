@@ -48,6 +48,11 @@ impl Paths {
         Ok(Paths { socket, holder_socket, config, state })
     }
 
+    /// `<config dir>/detect/` — per-agent manifest overrides.
+    pub fn detect_dir(&self) -> PathBuf {
+        self.config.parent().unwrap_or(self.state.as_path()).join("detect")
+    }
+
     pub fn create_dirs(&self) -> std::io::Result<()> {
         use crate::platform::private_dir;
         private_dir(&self.state)?;

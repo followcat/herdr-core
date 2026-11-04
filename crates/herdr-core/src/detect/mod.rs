@@ -5,9 +5,13 @@
 //! No match means [`State::Unknown`]; only positive evidence may publish a
 //! state. Nothing here touches the runtime, processes, or locks.
 
+pub mod catalog;
+pub mod identify;
 pub mod manifest;
 mod regions;
 
+pub use catalog::{Catalog, Limits};
+pub use identify::{SUPPORTED, identify};
 pub use manifest::Manifest;
 
 /// Longest input field the engine will scan; oversized input is Unknown.

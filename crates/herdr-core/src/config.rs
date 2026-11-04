@@ -27,6 +27,9 @@ pub struct Config {
     /// timeout on top), and to send anything at all before its line is
     /// given up and dialed again (default 30).
     pub machine_timeout: Option<f64>,
+    /// Screen-detected status: `enabled` and an optional agent allowlist.
+    /// Overrides live in `detect/*.toml` beside this file.
+    pub detect: Option<crate::detect::Limits>,
 }
 
 impl Config {

@@ -308,6 +308,8 @@ fn captured_screens_map_to_their_states() {
         ("claude-bash-running.txt", "claude", "", State::Idle, None),
         ("claude-approve-bash.txt", "claude", "", State::Blocked, Some("permission")),
         ("codex-idle.txt", "codex", "Codex", State::Idle, None),
+        // Codex titles carry the turn spinner while it works.
+        ("codex-idle.txt", "codex", "Codex ⠋ Esc to interrupt", State::Working, None),
         ("codex-approve-command.txt", "codex", "✳ Action Required — Codex", State::Blocked, None),
         ("codex-approve-edits.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("codex-trust.txt", "codex", "Codex", State::Blocked, Some("permission")),
@@ -325,4 +327,180 @@ fn captured_screens_map_to_their_states() {
         assert_eq!(d.state, *state, "{file} on {agent} (rule: {:?})", d.rule);
         assert_eq!(d.kind, *kind, "{file} on {agent} kind (rule: {:?})", d.rule);
     }
+}
+
+// --- foreground identification ----------------------------------------------
+
+use crate::foreground::Foreground;
+use catalog::{Catalog, Limits};
+
+fn fg(name: &str, argv: &[&str]) -> Foreground {
+    Foreground { pid: 1, name: name.into(), argv: argv.iter().map(|s| s.to_string()).collect(), cwd: "/tmp".into() }
+}
+
+#[test]
+fn identifies_native_executables_paths_and_suffixes() {
+    let cases: &[(&str, &[&str], Option<&str>)] = &[
+        ("claude", &["claude"], Some("claude")),
+        ("codex", &["codex", "--ask"], Some("codex")),
+        ("devin", &["devin"], Some("devin")),
+        ("opencode", &["opencode"], Some("opencode")),
+        ("claude-code", &["claude-code"], Some("claude")),
+        ("devin-cli", &["devin-cli"], Some("devin")),
+        ("opencode2", &["opencode2"], Some("opencode")),
+        // Paths: the basename, not the folders, carries the name.
+        ("node", &["/usr/local/bin/codex", "resume"], Some("codex")),
+        ("cmd", &["/home/user/.local/bin/opencode", "run"], Some("opencode")),
+        // Windows-style suffixes and separators.
+        ("claude.exe", &["claude.exe"], Some("claude")),
+        ("node", &["C:\\tools\\claude.CMD"], Some("claude")),
+        ("codex.ps1", &["codex.ps1"], Some("codex")),
+        ("node", &["/opt/devin/devin.js"], Some("devin")),
+        // Uppercased names still count.
+        ("CLAUDE", &["CLAUDE"], Some("claude")),
+    ];
+    for (name, argv, want) in cases {
+        assert_eq!(identify(&fg(name, argv)), *want, "{name} {argv:?}");
+    }
+}
+
+#[test]
+fn identifies_interpreter_entrypoints_not_mentions() {
+    let cases: &[(&str, &[&str], Option<&str>)] = &[
+        // node script position: path basename or package dir is the evidence.
+        ("node", &["node", "/home/user/.claude/local/cli.js"], None),
+        ("node", &["node", "/opt/devin/devin.js", "--version"], Some("devin")),
+        ("node", &["node", "/usr/lib/node_modules/command-code/dist/cli.js"], Some("command-code")),
+        ("node", &["node", "/usr/lib/node_modules/@openai/codex/bin/codex.js"], Some("codex")),
+        ("node", &["node", "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js"], Some("claude")),
+        ("node", &["node", "/usr/lib/node_modules/opencode-ai/dist/index.js"], Some("opencode")),
+        // Runtime flags are skipped; the script stays the entrypoint.
+        ("node", &["node", "--inspect", "/opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--require", "tsm", "/opt/claude/claude.js"], Some("claude")),
+        ("node", &["node", "--", "/opt/devin/devin.js"], Some("devin")),
+        // `node -e …` and `sh -c …` are inline source: nothing to inspect.
+        ("node", &["node", "-e", "require('devin')"], None),
+        ("sh", &["sh", "-c", "devin --version"], None),
+        // python -m uses the module's last dotted component.
+        ("python3", &["python3", "-m", "devin_cli"], Some("devin")),
+        ("python", &["python", "-m", "codex"], Some("codex")),
+        ("python3.12", &["python3.12", "-m", "opencode"], Some("opencode")),
+        ("python", &["python", "-c", "import devin"], None),
+        // Mentions in later arguments never classify.
+        ("vim", &["vim", "devin-notes.md"], None),
+        ("node", &["node", "/home/user/devin/main.js"], None),
+        ("less", &["less", "claude-transcript.txt"], None),
+        ("python3", &["python3", "-m", "venv", "codex-env"], None),
+        // Plain shells and the OS cmd stay unidentified.
+        ("bash", &["bash"], None),
+        ("sh", &["sh", "-l"], None),
+        ("zsh", &["zsh"], None),
+        ("cmd", &["cmd"], None),
+        ("cmd.exe", &["cmd.exe", "/c", "ver"], None),
+        ("powershell", &["powershell", "-Command", "claude"], None),
+        // A bare `cmd` word is never Command Code on its own.
+        ("cmd", &["cmd", "chat"], None),
+    ];
+    for (name, argv, want) in cases {
+        assert_eq!(identify(&fg(name, argv)), *want, "{name} {argv:?}");
+    }
+}
+
+#[test]
+fn command_code_needs_package_evidence_never_a_bare_cmd() {
+    // The npm `command-code` package's Unix binary is `cmd`; only a resolved
+    // path through the package may identify it.
+    let shim = std::env::temp_dir().join(format!("hc-detect-cmd-{}", std::process::id()));
+    let pkg = shim.join("node_modules/command-code/dist");
+    std::fs::create_dir_all(&pkg).unwrap();
+    let entry = pkg.join("cli.js");
+    std::fs::write(&entry, "// stub").unwrap();
+    let link = shim.join("cmd");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&entry, &link).unwrap();
+    #[cfg(windows)]
+    std::fs::copy(&entry, &link).unwrap();
+
+    let link_str = link.to_str().unwrap().to_string();
+    assert_eq!(identify(&fg("cmd", &[&link_str])), Some("command-code"), "resolved shim identifies the package");
+    assert_eq!(
+        identify(&fg("node", &["node", entry.to_str().unwrap()])),
+        Some("command-code"),
+        "script path in the package"
+    );
+    std::fs::remove_dir_all(&shim).unwrap();
+}
+
+// --- the manifest catalog ----------------------------------------------------
+
+fn overrides(tag: &str, entries: &[(&str, &str)]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("hc-detect-catalog-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, text) in entries {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    dir
+}
+
+const ALT_CLAUDE: &str = r#"
+id = "claude"
+[[rules]]
+id = "custom_marker"
+state = "working"
+contains = ["my custom marker"]
+"#;
+
+#[test]
+fn a_valid_override_replaces_the_bundled_manifest() {
+    let dir = overrides("valid", &[("claude.toml", ALT_CLAUDE)]);
+    let cat = Catalog::load(Some(&dir), None);
+    let m = cat.get("claude").unwrap();
+    assert_eq!(m.rules.len(), 1, "override wins over bundled");
+    let d = detect(&m, &input("my custom marker"));
+    assert_eq!(d.state, State::Working);
+    assert!(cat.warnings.is_empty(), "{:?}", cat.warnings);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_bad_override_falls_back_to_bundled_with_a_warning() {
+    let dir =
+        overrides("bad", &[("claude.toml", "id = \"claude\"\nnot toml at all [[[\n"), ("bogus.toml", ALT_CLAUDE)]);
+    let cat = Catalog::load(Some(&dir), None);
+    assert!(cat.get("claude").unwrap().rules.len() > 1, "bundled rules kept");
+    assert_eq!(cat.warnings.len(), 2, "{:?}", cat.warnings);
+    assert!(cat.warnings.iter().any(|w| w.contains("bogus.toml")), "{:?}", cat.warnings);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_override_must_name_the_agent_its_file_says() {
+    let dir = overrides("mismatch", &[("devin.toml", "id = \"codex\"\n[[rules]]\nid=\"r\"\ncontains=[\"x\"]\n")]);
+    let cat = Catalog::load(Some(&dir), None);
+    assert!(cat.get("devin").unwrap().rules.len() > 1, "bundled devin kept");
+    assert_eq!(cat.warnings.len(), 1, "{:?}", cat.warnings);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn disabled_and_limited_config_shape_the_catalog() {
+    let off = Catalog::load(None, Some(&Limits { enabled: Some(false), agents: None }));
+    assert!(off.get("claude").is_none() && off.get("devin").is_none(), "disabled means empty");
+
+    let only = Catalog::load(None, Some(&Limits { enabled: None, agents: Some(vec!["claude".into(), "nope".into()]) }));
+    assert!(only.get("claude").is_some());
+    assert!(only.get("devin").is_none() && only.get("codex").is_none(), "agents limits the set");
+    assert_eq!(only.warnings.len(), 1, "unknown agent name warns");
+    // Aliases still resolve inside an allowed manifest.
+    assert!(only.get("claude-code").is_some(), "alias for an allowed agent");
+}
+
+#[test]
+fn limits_parse_from_the_config_table() {
+    let cfg: crate::config::Config = toml::from_str("[detect]\nenabled = false\nagents = [\"claude\"]\n").unwrap();
+    let limits = cfg.detect.unwrap();
+    assert_eq!(limits.enabled, Some(false));
+    assert_eq!(limits.agents.as_deref(), Some(&["claude".to_string()][..]));
+    let cfg: crate::config::Config = toml::from_str("").unwrap();
+    assert!(cfg.detect.is_none(), "no table means defaults");
 }
