@@ -82,7 +82,7 @@ state yet, so the rule is unproven (or absent) until a capture exists.
 |---|---|---|
 | `devin` | `devin`, `devin-cli`; node entrypoints under `devin*`/`@devin*` paths | working, idle (captured); **blocked: needs capture** |
 | `claude` | `claude`, `claude-code`; `@anthropic-ai/claude-code` entrypoints | working incl. foreground shell, blocked, idle (captured); **transcript/menu skip: needs capture** |
-| `codex` | `codex`; `@openai/codex` entrypoints | blocked (captured), idle by positive title evidence (captured); **working + real title transitions: needs capture** |
+| `codex` | `codex`; `@openai/codex` entrypoints | blocked (captured); **idle, working and real title transitions: needs capture** |
 | `opencode` | `opencode`, `open-code`, `opencode2`, `opencode-ai` | blocked (captured); **working and evidence-backed idle: needs capture** |
 | `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | blocked, idle (captured); **working: needs capture** |
 

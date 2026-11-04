@@ -352,7 +352,7 @@ fn captured_screens_map_to_their_states() {
         ("claude-bash-running.txt", "claude", "", State::Working, None),
         ("claude-bash-finished.txt", "claude", "", State::Idle, None),
         ("claude-approve-bash.txt", "claude", "", State::Blocked, Some("permission")),
-        ("codex-idle.txt", "codex", "Codex", State::Idle, None),
+        ("codex-idle.txt", "codex", "Codex", State::Unknown, None),
         ("codex-approve-command.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("codex-approve-edits.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("codex-trust.txt", "codex", "Codex", State::Blocked, Some("permission")),
@@ -386,15 +386,23 @@ fn codex_command_approval_is_blocked_under_any_title() {
     }
 }
 
-/// Codex idle needs positive title evidence naming Codex; question controls
-/// get `question`, permission controls `permission`.
+/// A Codex title names who is running — it is not readiness evidence. An
+/// empty or non-prompt screen stays Unknown until captured readiness
+/// evidence exists; question controls get `question`, permission controls
+/// `permission`.
 #[test]
-fn codex_idle_needs_a_codex_title_and_kinds_split() {
+fn codex_title_alone_is_not_readiness_and_kinds_split() {
     let m = bundled("codex").unwrap();
+    assert_eq!(detect(&m, &titled("", "Codex")).state, State::Unknown, "an empty screen titled Codex is not ready");
     let idle = fixture("codex-idle.txt");
-    assert_eq!(detect(&m, &titled(&idle, "")).state, State::Unknown, "absent title is not idle evidence");
-    assert_eq!(detect(&m, &titled(&idle, "bash")).state, State::Unknown, "stale title is not idle evidence");
-    assert_eq!(detect(&m, &titled(&idle, "Codex")).state, State::Idle);
+    assert_eq!(detect(&m, &titled(&idle, "Codex")).state, State::Unknown, "a Codex title alone is not readiness");
+    assert_eq!(detect(&m, &titled(&idle, "")).state, State::Unknown);
+    let foreign = "$ cargo build\n   Compiling demo v0.1.0\n";
+    assert_eq!(
+        detect(&m, &titled(foreign, "Codex")).state,
+        State::Unknown,
+        "a stale Codex title on another screen fails closed"
+    );
 
     let ask = "›\n enter to submit answer\n";
     assert_eq!(detect(&m, &input(ask)).kind, Some("question"), "submit answer is a question");

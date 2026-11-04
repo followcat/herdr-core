@@ -151,16 +151,6 @@ regex = ['(?m)^(?:[•◦][ \t]+)?[^\s›•◦■✗✓─][^\r\n]* \((?:[0-9]+
 # A failed reconnect keeps its final elapsed timer but is no longer working.
 not = [{ line_regex = ['^(?:[•◦][ \t]+)?Reconnect failed — check the endpoint, then relaunch \([0-9hms ]+\)$'] }]
 
-# Idle needs positive readiness evidence: a title naming Codex. An empty or
-# stale inherited title (e.g. `bash`) is no evidence and stays unknown.
-[[rules]]
-id = "osc_title_idle"
-state = "idle"
-priority = 100
-region = "osc_title"
-visible_idle = true
-contains = ["codex"]
-not = [
-  { regex = ['(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)'] },
-  { contains = ["Action Required"] },
-]
+# No idle rule: a title naming Codex proves who is running, not that the
+# agent is ready. Captured readiness evidence is still needed — until then a
+# screen with no other match stays Unknown.
