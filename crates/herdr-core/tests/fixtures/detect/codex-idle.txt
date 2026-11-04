@@ -1,0 +1,23 @@
+codex
+user@host:~/dev/sandbox$ codex
+╭──────────────────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.156.1)                               │
+│                                                          │
+│ model:     GPT-6-Sol medium   /model to change           │
+│ directory: ~/dev/sandbox                                 │
+╰──────────────────────────────────────────────────────────╯
+
+  Tip: Visit the Codex community forum (https://community.openai.com/c/codex/37).
+
+
+› Réponds juste : pong
+
+
+• pong
+
+  21:30
+
+
+› Ask Codex to do anything
+
+  GPT-6-Sol medium · ~/dev/sandbox · Réponds juste pong

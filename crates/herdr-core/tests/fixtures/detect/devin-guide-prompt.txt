@@ -1,0 +1,14 @@
+
+ Devin
+
+ ✱ Did you know
+   Use /clear to start a fresh conversation
+
+ ❭ show me the docs
+
+ ✓ The reference guide is at docs/reference.md.
+
+───────────────────────────────────────────────────────────────────────────────── Session 00000000-0000-0000-0000 ─
+❭ Guide Devin while it works
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Model · mode · 1 shell ↓                                                                          Context: 12k / 262k tokens (4%)

@@ -1,0 +1,31 @@
+🐱 Welcome to Sandbox! Type 'help' for available commands.
+➜  project devin
+
+⠀⣴⣾⣶⡄⠀⠀⠀⠀
+⠀⠛⠿⠟⠻⣶⣾⣶⡄  Devin CLI
+⠀⣤⣶⣦⣴⠿⢿⠿⠃  v3000.11.234
+⠀⠻⢿⠿⠃⠀⠀⠀⠀
+
+ Pro · 10% remaining (resets in 1d 4h)
+
+❭ DEVINCHECK-beta: reply with the single word BETA                       
+
+ BETA
+
+❭ Run the shell command 'sleep 50' and wait for it, then reply with just 
+  DONE                                                                   
+
+ ✓ sleep 50 Running in background shell aec5ce
+ ✓ Read shell aec5ce
+
+ DONE
+
+❭ DEVINCHECK-gamma: reply with the single word GAMMA                     
+
+ GAMMA
+
+ ⏺ ~/project
+────────────────────────────── DEVINCHECK-beta: reply with the single … ─
+❭ ZETA draft for reader check
+─────────────────────────────────────────────────────────────────────────
+SWE-2 Max                                 Context: 15k / 262k tokens (5%)

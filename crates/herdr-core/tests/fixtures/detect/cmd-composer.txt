@@ -1,0 +1,9 @@
+ █▀▀ █▀▄▀█ █▀▄   Command Code v1.88.2
+ █   █ ▀ █ █ █   models: glm-5.3-flash with max
+ ▀▀▀ ▀   ▀ ▀▀     effort · taste-1
+                 /home/user/project
+
+───────────────────────────────────────────────
+❯ Ask your question...
+───────────────────────────────────────────────
+  ? for shortcuts

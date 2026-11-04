@@ -1,0 +1,9 @@
+  ┃
+  ┃  △ Permission required
+  ┃    → Edit notes.txt
+  ┃
+  ┃  No diff provided
+  ┃
+  ┃
+  ┃   Allow once   Always allow   Reject             ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃

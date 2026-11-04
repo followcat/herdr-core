@@ -1,0 +1,17 @@
+❯ Ajoute un test pour le parseur
+
+⏺ Je lis le module avant d'écrire le test.
+
+  Read 2 files, ran 1 shell command
+
+⏺ Running npx vitest run tests/activity.test.ts
+  ⎿  $ npx vitest run tests/activity.test.ts
+
+✢ Boondoggling… (1m 53s · ↓ 6.9k tokens · thought for 1s)
+  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work
+
+────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on · 1 shell · ← for agents

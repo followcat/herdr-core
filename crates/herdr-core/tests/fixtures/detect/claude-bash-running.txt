@@ -1,0 +1,22 @@
+❯ Lance les tests unitaires
+
+⏺ Tous les tests passent.
+
+✻ Brewed for 12s · done 10:02 am
+
+! ./scripts/build.sh --all
+  ⎿  step 4 of 30
+     step 5 of 30
+     step 6 of 30
+     step 7 of 30
+     +3 lines (7s)
+     (ctrl+b to run in background)
+
+❯ Résume la sortie du build
+  ctrl+enter to send now
+
+────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+────────────────────────────────────────────────────────────────────────────────
+
+  ⏸ manual mode on · ← for agents

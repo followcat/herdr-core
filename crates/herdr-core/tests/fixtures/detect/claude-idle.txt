@@ -1,0 +1,30 @@
+
+❯ /context
+  ⎿  Context Usage
+     ⛀ ⛁ ⛀ ⛁ ⛶   Opus 5.5
+     ⛶ ⛶ ⛶ ⛶ ⛶   claude-opus-5-5
+     ⛶ ⛶ ⛶ ⛶ ⛶   40.7k/1m tokens (4%)
+     ⛶ ⛶ ⛶ ⛶ ⛶
+     ⛶ ⛶ ⛶ ⛶ ⛶   Estimated usage by category
+     ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System prompt: 2.4k tokens (0.2%)
+     ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ System tools: 19.9k tokens (2.0%)
+     ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Skills: 4.4k tokens (0.4%)
+     ⛶ ⛶ ⛶ ⛶ ⛶   ⛁ Messages: 14.1k tokens (1.4%)
+     ⛶ ⛶ ⛶ ⛝ ⛝   ⛶ Free space: 926.3k (92.6%)
+                 ⛝ Autocompact buffer: 33k tokens
+     (3.3%)
+
+     Auto-compact window: 1m tokens
+
+     MCP tools · /mcp (loaded on-demand)
+     └ 74 tools · 0 tokens
+
+     Skills · /skills
+     └ 25 skills · 4.4k tokens
+
+     /context all to expand
+
+────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for ag…

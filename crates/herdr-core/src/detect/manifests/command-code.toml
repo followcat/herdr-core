@@ -1,0 +1,46 @@
+# Screen rules for Command Code (`cmd` CLI, npm package `command-code`).
+# Written for this fork from captured screens; no herdr manifest exists.
+# Known gap: no working rule — a running turn maps to unknown until evidence
+# for a live working footer exists.
+id = "command-code"
+version = "2026.11.04.1"
+min_engine_version = 1
+updated_at = "2026-11-04T00:00:00Z"
+aliases = ["command_code"]
+
+# The first-run folder-trust dialog: "Do you trust the files in this
+# folder?" with numbered Yes/No and "↑/↓ to navigate · enter to select ·
+# esc to exit" (cmd-trust-dialog fixture).
+[[rules]]
+id = "trust_folder_dialog"
+state = "blocked"
+kind = "permission"
+priority = 300
+region = "bottom_non_empty_lines(14)"
+visible_blocker = true
+contains = ["do you trust the files in this folder?", "enter to select", "esc to exit"]
+line_regex = ['^\s*❯?\s*\d+\.\s+(?i:yes|no)\b']
+
+# The composer box: "❯ <input or placeholder>" between ─ rules, with the
+# "? for shortcuts" hint under it (cmd-composer / cmd-draft fixtures).
+[[rules]]
+id = "composer_prompt"
+state = "idle"
+priority = 100
+region = "bottom_non_empty_lines(6)"
+visible_idle = true
+contains = ["? for shortcuts"]
+line_regex = ['^\s*❯']
+not = [
+  { contains = ["enter to select", "esc to exit"] },
+]
+
+# The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows
+# (cmd-slash-menu fixture). Still idle: the agent waits for input.
+[[rules]]
+id = "slash_menu"
+state = "idle"
+priority = 90
+region = "bottom_non_empty_lines(12)"
+visible_idle = true
+line_regex = ['^\s*❯\s*/', '^\s*/\S+\s{2,}\S']

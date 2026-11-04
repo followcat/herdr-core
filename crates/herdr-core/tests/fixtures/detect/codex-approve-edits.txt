@@ -1,0 +1,6 @@
+Would you like to make the following edits?
+
+› 1. Yes, proceed
+  2. No, and tell Codex what to do differently
+
+Press enter to confirm or esc to cancel

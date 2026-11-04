@@ -1,0 +1,17 @@
+───────────────────────────────────────────────
+
+Do you trust the files in this folder?
+/home/user/project
+
+Command Code may read files in this folder.
+Reading untrusted files may lead Command Code
+to behave in unexpected ways.
+
+With your permission Command Code may execute
+files in this folder. Executing untrusted code
+is unsafe.
+
+❯ 1. Yes, proceed
+  2. No, exit
+
+↑/↓ to navigate · enter to select · esc to exit

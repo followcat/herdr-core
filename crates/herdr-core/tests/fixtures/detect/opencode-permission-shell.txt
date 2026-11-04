@@ -1,0 +1,9 @@
+  ┃
+  ┃  △ Permission required
+  ┃    # Shell command
+  ┃
+  ┃  - echo hello
+  ┃
+  ┃
+  ┃   Allow once   Always allow   Reject             ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃
