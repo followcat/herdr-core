@@ -293,3 +293,65 @@ fn remote_misses_and_renames_keep_subscribers_on_the_current_machine() {
     drop(core);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// The mirror stores terminal records verbatim: `source:"screen"` inside a
+/// status rides along untouched, and a reconnect's full replace copies the
+/// far turn rather than counting anything here.
+#[test]
+fn screen_provenance_survives_the_mirror_and_reconnect_keeps_turns() {
+    let root = std::path::PathBuf::from(format!(
+        "/var/tmp/hc-mirror-source-{}-{}",
+        std::process::id(),
+        crate::platform::random_hex()
+    ));
+    let paths = Paths {
+        socket: root.join("core.sock"),
+        holder_socket: root.join("holder.sock"),
+        state: root.clone(),
+        config: root.join("config.toml"),
+    };
+    paths.create_dirs().unwrap();
+    let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+    let machine = Machine {
+        name: "away".into(),
+        target: "away".into(),
+        via: false,
+        temporary: false,
+        session: None,
+        id: "remote".into(),
+        host: "away".into(),
+        version: "test".into(),
+    };
+    core.lock().machines.push(machine.clone());
+    let record = || {
+        json!({
+            "address": "t1", "state": "live", "turn": 3, "reported": false,
+            "status": {"state": "working", "source": "screen"},
+            "records": {},
+        })
+    };
+    mirror_replace(&core, &machine, vec![record()]);
+    let mirrored = core.lock().mirrors[&machine.id]["away/t1"].clone();
+    assert_eq!(mirrored["status"]["source"], "screen", "provenance survives the copy");
+    assert_eq!(mirrored["reported"], false);
+    assert_eq!(mirrored["turn"], 3);
+    // Status events keep provenance too.
+    mirror_event(
+        &core,
+        &machine,
+        json!({"type": "status", "terminal": "t1", "data": {
+            "status": {"state": "blocked", "kind": "permission", "source": "screen"},
+            "records": {}, "reported": false,
+        }}),
+    );
+    let mirrored = core.lock().mirrors[&machine.id]["away/t1"].clone();
+    assert_eq!(mirrored["status"]["state"], "blocked");
+    assert_eq!(mirrored["status"]["source"], "screen");
+    assert_eq!(mirrored["turn"], 3, "a status event does not recount turns here");
+    // A reconnect replaces the mirror wholesale: the far turn is copied, never bumped.
+    mirror_replace(&core, &machine, vec![record()]);
+    let mirrored = core.lock().mirrors[&machine.id]["away/t1"].clone();
+    assert_eq!(mirrored["turn"], 3, "reconnect copies the record; it does not count a turn");
+    drop(core);
+    std::fs::remove_dir_all(root).unwrap();
+}

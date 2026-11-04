@@ -195,10 +195,13 @@ impl Core {
         st.invalidate_screen(id);
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
         let mut word_changed = false;
+        let mut authority = false;
         for r in reports {
             let was = word(st);
             let t = st.reg.terminals.get_mut(&id).expect("live terminal");
+            let was_reported = t.reported;
             let change = crate::status::apply(t, r);
+            authority |= t.reported && !was_reported;
             let now = word(st);
             if now != was
                 && was.as_deref() == Some("blocked")
@@ -210,8 +213,10 @@ impl Core {
             word_changed |= now != was;
         }
         // Losing the holder too (a reboot) leaves no tail to replay: queue a new word,
-        // and with it a turn or news, for immediate persistence. Messages and progress can wait.
-        if word_changed { self.save(st) } else { self.save_soon() }
+        // and with it a turn or news, for immediate persistence — and native
+        // authority too, even when a child-only or same-word report never
+        // moved the root. Messages and progress can wait.
+        if word_changed || authority { self.save(st) } else { self.save_soon() }
     }
 
     /// The screen's verdict for a silent program (fork): the same
@@ -220,13 +225,34 @@ impl Core {
     /// `None` withdraws the inferred root (evidence gone, foreground left).
     /// The screen worker is its caller; tests drive it directly.
     pub(crate) fn inferred_status(&self, st: &mut State, id: u32, verdict: Option<(&str, Option<&str>)>) {
+        if st.screen_frozen {
+            // Between a stop/restart request and the next core: nothing
+            // publishes, expires or withdraws on the way out.
+            return;
+        }
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
         let was = word(st);
         let change = match verdict {
             Some((state, kind)) => {
+                // An accepted verdict re-proves a restored root: the marker
+                // goes even when the same word leaves nothing to publish.
+                if let Some(w) = st.screen_status.get_mut(&id) {
+                    w.unconfirmed_until = None;
+                }
                 crate::status::apply_inferred(st.reg.terminals.get_mut(&id).expect("live terminal"), state, kind)
             }
-            None => crate::status::withdraw_inferred(st.reg.terminals.get_mut(&id).expect("live terminal")),
+            None => {
+                // A withdrawal also ends the unconfirmed window — under it the
+                // root drops without a turn: nothing fresh ever proved it.
+                let unconfirmed =
+                    st.screen_status.get_mut(&id).and_then(|w| w.unconfirmed_until.take()).is_some();
+                let t = st.reg.terminals.get_mut(&id).expect("live terminal");
+                if unconfirmed {
+                    crate::status::withdraw_unconfirmed(t)
+                } else {
+                    crate::status::withdraw_inferred(t)
+                }
+            }
         };
         if change == crate::status::Change::default() {
             return;

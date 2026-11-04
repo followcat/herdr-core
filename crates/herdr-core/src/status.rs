@@ -181,6 +181,21 @@ pub fn withdraw_inferred(t: &mut Terminal) -> Change {
     Change { status: true, root_report: true, turn_ended: end_turn(t, was_working), ..Default::default() }
 }
 
+/// Drop a restored inferred root that was never re-proven: its recovery
+/// deadline passed, or detection can no longer look at it. Like
+/// `withdraw_inferred` it stamps and announces the null — but no turn ends:
+/// nothing fresh ever proved it, so no turn can have completed. Completion
+/// news stays out the same way (`turn_ended` is what counts it).
+pub fn withdraw_unconfirmed(t: &mut Terminal) -> Change {
+    if t.status.as_ref().is_none_or(|s| s.source.is_none()) {
+        return Change::default();
+    }
+    let was_word = word(t);
+    t.status = None;
+    stamp(t, was_word);
+    Change { status: true, root_report: true, ..Default::default() }
+}
+
 /// The program ended: its status facts reset.
 pub fn reset(t: &mut Terminal) -> Change {
     let (was_working, was_word) = (working(t), word(t));

@@ -78,6 +78,11 @@ impl Core {
         for id in ids {
             let Some(holder) = st.current() else { break };
             let instance = holder.instance.clone();
+            // The old program's re-proof deadline must not reach into its
+            // replacement: a new program re-earns its inferred status.
+            if let Some(w) = st.screen_status.get_mut(&id) {
+                w.unconfirmed_until = None;
+            }
             let t = st.reg.terminals.get_mut(&id).expect("pending");
             let env = crate::api::child_env(base_env.clone(), t.restart_env.clone());
             let cwd = t

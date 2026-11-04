@@ -226,7 +226,11 @@ async fn server_stop(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
 }
 
 async fn server_restart(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
+    // Under the state lock with the freeze, so no detection pass sees
+    // "restarting" as a moment to still publish or keep collecting.
+    let mut st = core.lock();
     core.restart.store(true, std::sync::atomic::Ordering::SeqCst);
+    st.freeze_screen_detection();
     Ok(StopResult { stopped: true })
 }
 

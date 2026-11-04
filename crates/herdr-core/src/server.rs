@@ -65,7 +65,12 @@ pub fn serve() -> io::Result<()> {
                 _ = core.stop.notified() => break,
                 // SIGTERM is a planned restart: programs stay, screens are saved.
                 _ = &mut term => {
+                    // The flag and the detection freeze go down under the
+                    // same lock, before the goodbye and handover awaits.
+                    let mut st = core.lock();
                     core.restart.store(true, std::sync::atomic::Ordering::SeqCst);
+                    st.freeze_screen_detection();
+                    drop(st);
                     break;
                 }
             }

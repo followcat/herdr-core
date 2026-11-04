@@ -75,6 +75,10 @@ pub struct State {
     pub stitched: HashMap<u32, (u64, crate::stitch::Capture)>,
     /// Per-terminal screen-detection state for `watch_screen_status` (fork).
     pub screen_status: HashMap<u32, crate::screen_status::ScreenWatch>,
+    /// The core is handing over or going away (fork): detection collects and
+    /// publishes nothing while set. Set under this lock before any goodbye
+    /// or await; never unset — the process is leaving.
+    pub screen_frozen: bool,
     /// The last terminal id a detection pass examined: passes resume after it
     /// and wrap, so terminals past the per-pass cap get their turn (fork).
     pub screen_cursor: u32,
@@ -138,6 +142,17 @@ impl State {
     pub fn invalidate_screen(&mut self, id: u32) {
         if self.reg.terminals.contains_key(&id) {
             self.screen_status.entry(id).or_default().invalidate();
+        }
+    }
+
+    /// Stop and restart boundary (fork): the worker collects nothing and no
+    /// inferred mutation applies while the screens are saved and the next
+    /// core re-detects. Every watch generation bumps too, so a pass already
+    /// in flight still dies at commit.
+    pub fn freeze_screen_detection(&mut self) {
+        self.screen_frozen = true;
+        for w in self.screen_status.values_mut() {
+            w.invalidate();
         }
     }
 }
@@ -496,6 +511,16 @@ impl Core {
                 // A repeated done, or done -> idle, entirely during downtime can remain unobservable.
                 let root_report = rec.turn != turn || now != was;
                 self.status_changed(st, id, crate::status::Change { root_report, ..Default::default() });
+            }
+            // The screen was replaced under detection: cached and in-flight
+            // verdicts belong to the screen the old core saw, so both
+            // staleness axes bump. An inferred root the registry kept stands
+            // unconfirmed until a verdict from this screen re-proves it.
+            st.invalidate_screen(id);
+            *st.output_seq.entry(id).or_default() += 1;
+            if st.reg.terminals.get(&id).is_some_and(|t| t.status.as_ref().is_some_and(|s| s.source.is_some())) {
+                st.screen_status.entry(id).or_default().unconfirmed_until =
+                    Some(tokio::time::Instant::now() + crate::screen_status::RECONFIRM);
             }
             if spawning {
                 self.spawn_result(st, instance, id, Ok(h.pid));
@@ -916,6 +941,9 @@ impl Core {
     /// Planned restart: the holder keeps programs; we save every screen exactly.
     pub async fn handover(&self) -> io::Result<()> {
         self.wait_for_sweeps();
+        // Freeze before the goodbye below: while it runs, a late detection
+        // pass must not publish over roots the next core restores.
+        self.lock().freeze_screen_detection();
         self.goodbye(Goodbye::Handover);
         self.wait_for_sweeps(); // a holder that died during goodbye left one
         {
@@ -940,6 +968,8 @@ impl Core {
         let live: Vec<u32> = {
             let mut st = self.lock();
             st.stopping = true;
+            // Detection freezes too: nothing infers over programs being ended.
+            st.freeze_screen_detection();
             st.reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect()
         };
         self.changed.notify_waiters(); // execs end

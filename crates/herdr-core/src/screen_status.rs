@@ -29,6 +29,11 @@ pub struct ScreenWatch {
     /// taken before a bump dies at commit even when its other fields happen
     /// to match again — a resize there and back, a foreground A→B→A.
     generation: u64,
+    /// A root status restored from disk stands unconfirmed until a verdict
+    /// from a post-adoption snapshot re-proves it; past this it is
+    /// withdrawn. Not touched by `invalidate`: the deadline never extends,
+    /// whatever the evidence does in between.
+    pub(crate) unconfirmed_until: Option<Instant>,
 }
 
 impl ScreenWatch {
@@ -80,6 +85,11 @@ const SETTLE: Duration = Duration::from_millis(1500);
 /// Terminals snapshotted per pass; the rest wait a tick.
 const MAX_PER_PASS: usize = 32;
 
+/// A restored inferred root gets this long to be re-proven by a fresh
+/// verdict after adoption, then it is withdrawn: well past one pass plus
+/// the idle settle, whatever evidence appears in between.
+pub(crate) const RECONFIRM: Duration = Duration::from_secs(30);
+
 impl Core {
     /// The detection worker, spawned once beside `watch_foreground`: a pass
     /// every `cadence`, driven by `output_seq` changes plus settle deadlines.
@@ -90,6 +100,18 @@ impl Core {
             eprintln!("core: detect: {warning}");
         }
         if catalog.agents().next().is_none() {
+            // Nothing can ever be re-proven here: any root the registry
+            // restored is withdrawn now, then the worker just stops.
+            let mut st = self.lock();
+            let restored: Vec<u32> = st
+                .screen_status
+                .iter()
+                .filter(|(_, w)| w.unconfirmed_until.is_some())
+                .map(|(id, _)| *id)
+                .collect();
+            for id in restored {
+                self.inferred_status(&mut st, id, None);
+            }
             return;
         }
         loop {
@@ -122,7 +144,7 @@ impl Core {
         let mut scanned = 0usize;
         while out.len() < MAX_PER_PASS {
             let mut st = self.lock();
-            if scanned >= st.reg.terminals.len() {
+            if st.screen_frozen || scanned >= st.reg.terminals.len() {
                 break;
             }
             let cursor = st.screen_cursor;
@@ -159,6 +181,13 @@ impl Core {
             st.screen_status.remove(&id);
             return None;
         };
+        // A restored root past its re-proof deadline is withdrawn. Checked
+        // before every gate below so it fires while stitching, under
+        // synchronized output, and on terminals not snapshotted this pass.
+        if st.screen_status.get(&id).and_then(|w| w.unconfirmed_until).is_some_and(|at| at <= Instant::now()) {
+            self.inferred_status(st, id, None);
+            return None;
+        }
         if !live || st.link(id).is_none() || agent.is_none() {
             // Gone, holderless, or no supported agent in front: whatever the
             // screen said about the old program is withdrawn — never "done".
@@ -179,7 +208,18 @@ impl Core {
             return None;
         }
         let agent = agent.expect("checked above");
-        let manifest = catalog.get(agent)?;
+        let manifest = match catalog.get(agent) {
+            Some(manifest) => manifest,
+            None => {
+                // This catalog has no rules for the agent in front: nothing
+                // here can re-prove a restored root, so it is withdrawn now
+                // rather than at its deadline.
+                if st.screen_status.get(&id).is_some_and(|w| w.unconfirmed_until.is_some()) {
+                    self.inferred_status(st, id, None);
+                }
+                return None;
+            }
+        };
         let (sync, size) = st.screens.get(&id).map(|s| (s.dec_mode(2026), s.size()))?;
         if sync {
             // Synchronized output: mid-batch rows are not evidence.
@@ -233,6 +273,7 @@ impl Core {
         };
         let eligible = t.is_live()
             && !t.reported
+            && !st.screen_frozen
             && st.link(snap.id).is_some()
             && !st.stitching.contains(&snap.id)
             && agent.is_some()
@@ -255,7 +296,9 @@ impl Core {
                     Some(("blocked", detection.kind))
                 }
                 Verdict::Idle => {
-                    if said_idle {
+                    // Already idle: nothing new — except a restored idle root,
+                    // which still owes the settle before it is re-proven.
+                    if said_idle && watch.unconfirmed_until.is_none() {
                         watch.idle_since = None;
                         None
                     } else {
