@@ -308,9 +308,7 @@ fn captured_screens_map_to_their_states() {
         ("claude-bash-running.txt", "claude", "", State::Idle, None),
         ("claude-approve-bash.txt", "claude", "", State::Blocked, Some("permission")),
         ("codex-idle.txt", "codex", "Codex", State::Idle, None),
-        // Codex titles carry the turn spinner while it works.
-        ("codex-idle.txt", "codex", "Codex ⠋ Esc to interrupt", State::Working, None),
-        ("codex-approve-command.txt", "codex", "✳ Action Required — Codex", State::Blocked, None),
+        ("codex-approve-command.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("codex-approve-edits.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("codex-trust.txt", "codex", "Codex", State::Blocked, Some("permission")),
         ("opencode-permission-edit.txt", "opencode", "", State::Blocked, Some("permission")),
@@ -327,6 +325,38 @@ fn captured_screens_map_to_their_states() {
         assert_eq!(d.state, *state, "{file} on {agent} (rule: {:?})", d.rule);
         assert_eq!(d.kind, *kind, "{file} on {agent} kind (rule: {:?})", d.rule);
     }
+}
+
+/// The command-approval screen must be blocked from screen evidence alone:
+/// its `› N.` options are a selection cursor, so no "Action Required" title
+/// is allowed to hide them — and idle must not claim it either.
+#[test]
+fn codex_command_approval_is_blocked_under_any_title() {
+    let m = bundled("codex").unwrap();
+    let screen = fixture("codex-approve-command.txt");
+    for title in ["", "bash", "Codex"] {
+        let d = detect(&m, &titled(&screen, title));
+        assert_eq!(d.state, State::Blocked, "title {title:?} (rule: {:?})", d.rule);
+        assert_eq!(d.kind, Some("permission"), "title {title:?} (rule: {:?})", d.rule);
+    }
+}
+
+/// Codex idle needs positive title evidence naming Codex; question controls
+/// get `question`, permission controls `permission`.
+#[test]
+fn codex_idle_needs_a_codex_title_and_kinds_split() {
+    let m = bundled("codex").unwrap();
+    let idle = fixture("codex-idle.txt");
+    assert_eq!(detect(&m, &titled(&idle, "")).state, State::Unknown, "absent title is not idle evidence");
+    assert_eq!(detect(&m, &titled(&idle, "bash")).state, State::Unknown, "stale title is not idle evidence");
+    assert_eq!(detect(&m, &titled(&idle, "Codex")).state, State::Idle);
+
+    let ask = "›\n enter to submit answer\n";
+    assert_eq!(detect(&m, &input(ask)).kind, Some("question"), "submit answer is a question");
+    let ask_all = "›\n enter to submit all\n";
+    assert_eq!(detect(&m, &input(ask_all)).kind, Some("question"), "submit all is a question");
+    let perm = "›\n press enter to confirm or esc to cancel\n";
+    assert_eq!(detect(&m, &input(perm)).kind, Some("permission"), "confirm/cancel is a permission");
 }
 
 // --- foreground identification ----------------------------------------------

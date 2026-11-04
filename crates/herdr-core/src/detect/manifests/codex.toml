@@ -89,10 +89,38 @@ region = "after_last_prompt_marker"
 visible_blocker = true
 any = [
   { contains = ["press enter to confirm or esc to cancel"] },
-  { contains = ["enter to submit answer"] },
-  { contains = ["enter to submit all"] },
   { contains = ["allow command?"] },
   { contains = ["All Results", "Filesystem Only", "Plugins"] },
+]
+
+# "enter to submit answer/all" answers a question, not a permission prompt.
+[[rules]]
+id = "live_strong_question"
+state = "blocked"
+kind = "question"
+priority = 900
+region = "after_last_prompt_marker"
+visible_blocker = true
+any = [
+  { contains = ["enter to submit answer"] },
+  { contains = ["enter to submit all"] },
+]
+
+# The command-approval dialog uses `› N.` as a selection cursor, not a prompt
+# marker: the strong blocker's region hides it and the weak blocker's region
+# collapses. Match its own wording (codex-approve-command capture).
+[[rules]]
+id = "command_approval"
+state = "blocked"
+kind = "permission"
+priority = 900
+region = "whole_recent"
+visible_blocker = true
+contains = ["would you like to run the following command"]
+line_regex = ['^\s*[›❯]?\s*\d+\.\s+(?i:yes)\b']
+any = [
+  { contains = ["(esc)"] },
+  { contains = ["press enter to confirm"] },
 ]
 
 [[rules]]
@@ -123,13 +151,15 @@ regex = ['(?m)^(?:[•◦][ \t]+)?[^\s›•◦■✗✓─][^\r\n]* \((?:[0-9]+
 # A failed reconnect keeps its final elapsed timer but is no longer working.
 not = [{ line_regex = ['^(?:[•◦][ \t]+)?Reconnect failed — check the endpoint, then relaunch \([0-9hms ]+\)$'] }]
 
+# Idle needs positive readiness evidence: a title naming Codex. An empty or
+# stale inherited title (e.g. `bash`) is no evidence and stays unknown.
 [[rules]]
 id = "osc_title_idle"
 state = "idle"
 priority = 100
 region = "osc_title"
 visible_idle = true
-regex = ['\S']
+contains = ["codex"]
 not = [
   { regex = ['(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)'] },
   { contains = ["Action Required"] },
