@@ -10,6 +10,8 @@ Non-Cargo inputs are checked in so regeneration doesn't depend on a license serv
 - `uucode*.txt`: [uucode at 9d55524551411b493cca41ca06363625d90aff1e](https://github.com/jacobsandlund/uucode/tree/9d55524551411b493cca41ca06363625d90aff1e), its `LICENSE.md` and both files in `licenses/`. Include the Hoehrmann decoder notice conservatively alongside the Unicode tables; both are part of the imported module.
 - `musl.txt`: [musl v1.2.5 COPYRIGHT](https://github.com/ifduyue/musl/blob/v1.2.5/COPYRIGHT). Rust 1.95.0's `src/ci/docker/scripts/musl.sh` and `musl-toolchain.sh` select 1.2.5 with security patches for the release Linux targets. The patches do not replace its license.
 - `rust.txt`: Rust 1.95.0's installed `share/doc/rust/COPYRIGHT-library.html`, converted to plain text, followed by `library/compiler-builtins/LICENSE.txt` from the same toolchain's rust-src. These cover the standard library and compiler runtime, which Cargo.lock does not list.
+- `herdr.txt`: herdr's Apache-2.0 license, covering the bundled detect manifests adapted from it.
+- `wherdr.txt`: [wherdr](https://github.com/afloury/wherdr)'s MIT license at revision `d6f81665` (followcat/wherdr `mobile`), covering the screen-detection test fixtures under `crates/herdr-core/tests/fixtures/detect/`; see the provenance README there.
 
 Windows archives also carry Microsoft's ConPTY LICENSE and NOTICE from `distribution/windows/`, checked against the pinned package by `scripts/fetch-conpty.ps1`.
 

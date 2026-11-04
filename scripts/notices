@@ -15,7 +15,8 @@ jq -r '.packages[] | select(.source != null) | "\(.name) \(.version)\t\(.license
         zig:"Zig's compiler_rt (MIT)" uucode:"uucode (MIT), 9d55524551411b493cca41ca06363625d90aff1e" \
         uucode-unicode:"uucode Unicode data (Unicode-3.0)" uucode-utf8:"uucode UTF-8 decoder (MIT)" \
         musl:"musl 1.2.5, statically linked on Linux (MIT and BSD)" rust:"Rust 1.95.0 standard library and compiler runtime" \
-        herdr:"herdr, source of the bundled detect manifests (Apache-2.0)"; do
+        herdr:"herdr, source of the bundled detect manifests (Apache-2.0)" \
+        wherdr:"wherdr, source of screen-detection test fixtures (MIT)"; do
         printf '\n==== %s\n\n' "${part#*:}"
         cat "distribution/notices/${part%%:*}.txt"
     done
