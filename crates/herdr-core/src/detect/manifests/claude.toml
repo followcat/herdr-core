@@ -72,13 +72,19 @@ priority = 968
 region = "current_shell_block"
 visible_working = true
 # A `!` shell running under the composer keeps a live "run in background"
-# hint and an elapsed timer — but only in the *current* (last) `!` block.
-# Older blocks' retained controls stay outside the region, and a collapsed
-# `… +N lines` tail after them means the block finished.
+# hint and an elapsed timer — but only in the *current* (last) `!` block, and
+# only while those controls are the last transcript content above the
+# composer. The second gate anchors on the block's last control line and
+# requires everything after it — up to the composer — to be blank lines,
+# queued input (`❯ <text>`, `ctrl+enter to send now`, `Press up to edit
+# queued messages`) or the block's own timer-bearing `+N lines (Ns)` progress
+# line. A `⏺` reply, a `✻ … done` line, a new `!` block or any tool output
+# after the controls means the block finished, and a collapsed `… +N lines`
+# tail never matches the timer-bearing alternative because it has no `(Ns)`.
 contains = ["ctrl+b to run in background"]
 line_regex = ['\(\d+[smh](?:\s|·|\))']
-not = [
-  { regex = ['ctrl\+b to run in background[\s\S]*…\s*\+\d+ lines'] },
+regex = [
+  '[\s\S]*ctrl\+b to run in background[^\n]*(?:\n(?:(?:[ \t]*(?:❯[^\n]*)?|[^\n]*(?:ctrl\+enter to send now|Press up to edit queued messages|\+\d+ lines \(\d+[smh])[^\n]*)\n)*(?:[ \t]*(?:❯[^\n]*)?|[^\n]*(?:ctrl\+enter to send now|Press up to edit queued messages|\+\d+ lines \(\d+[smh])[^\n]*))?\z',
 ]
 
 [[rules]]

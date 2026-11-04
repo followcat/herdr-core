@@ -412,6 +412,64 @@ fn retained_shell_controls_from_an_older_block_are_not_working() {
     assert_eq!(d.state, State::Idle, "stale controls must not win (rule: {:?})", d.rule);
 }
 
+/// A live `!` block is only working while its controls are the last
+/// transcript content above the composer: a `⏺` reply, a `✻ … done` line or
+/// any tool output after them means the block finished. Blank lines, queued
+/// input and the block's own timer-bearing `+N lines (Ns)` progress line are
+/// the only allowed tail. Composed from captured lines, not invented text.
+#[test]
+fn shell_controls_must_be_the_last_transcript_content() {
+    fn block<'s>(screen: &'s str, from: &str, to: &str) -> &'s str {
+        let start = screen.find(from).unwrap();
+        let end = screen[start..].find(to).map(|i| start + i + to.len()).unwrap();
+        &screen[start..end]
+    }
+    let running = fixture("claude-bash-running.txt");
+    let finished = fixture("claude-bash-finished.txt");
+    let done = fixture("claude-done.txt");
+    let composer = &finished[finished.find("───").unwrap()..];
+    // Captured lines of the running block: `!`, steps, `+3 lines (7s)`,
+    // `(ctrl+b to run in background)`.
+    let shell: Vec<&str> = block(&running, "! ", "(ctrl+b to run in background)").lines().collect();
+    let (progress, controls) = (shell[shell.len() - 2], shell[shell.len() - 1]);
+    let m = bundled("claude").unwrap();
+
+    // The untouched captures still hold: live controls work, a collapsed
+    // `… +N lines` block without them is idle.
+    assert_eq!(detect(&m, &input(&running)).state, State::Working);
+    assert_eq!(detect(&m, &input(&finished)).state, State::Idle);
+
+    // The captured claude-done screen appended after the running block's
+    // controls: the `⏺` reply and `✻ … done` are newer transcript content.
+    let finished_later = format!("{}\n{}", block(&running, "! ", "(ctrl+b to run in background)"), done);
+    let d = detect(&m, &input(&finished_later));
+    assert_eq!(d.state, State::Idle, "newer transcript defeats the controls (rule: {:?})", d.rule);
+
+    // The same collapse marker after the controls: `… +N lines` has no
+    // `(Ns)` timer, so it is finished evidence, not live progress.
+    let collapsed = format!("{}\n{}\n     … +27 lines\n\n{}", shell[0], controls, composer);
+    let d = detect(&m, &input(&collapsed));
+    assert_eq!(d.state, State::Idle, "a collapse tail defeats the controls (rule: {:?})", d.rule);
+
+    // The timer-bearing `+3 lines (7s)` progress line — whether it sits
+    // before the controls or after them — is live evidence, not a collapse.
+    for (name, tail_progress) in [("progress before controls", false), ("progress after controls", true)] {
+        let live = if tail_progress {
+            format!("{}\n{}\n{}\n\n{}", shell[0], controls, progress, composer)
+        } else {
+            format!("{}\n{}\n{}\n\n{}", shell[0], progress, controls, composer)
+        };
+        let d = detect(&m, &input(&live));
+        assert_eq!(d.state, State::Working, "{name} (rule: {:?})", d.rule);
+    }
+
+    // A `!` draft inside the composer is input, not a shell block: the
+    // detection is unchanged.
+    let drafted = finished.replacen("\n❯\n", "\n❯ ! ls -la\n", 1);
+    let d = detect(&m, &input(&drafted));
+    assert_eq!(d.state, State::Idle, "composer draft changes nothing (rule: {:?})", d.rule);
+}
+
 /// A Codex title names who is running — it is not readiness evidence. An
 /// empty or non-prompt screen stays Unknown until captured readiness
 /// evidence exists; question controls get `question`, permission controls
