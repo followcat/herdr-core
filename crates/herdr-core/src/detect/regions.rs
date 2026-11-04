@@ -64,6 +64,16 @@ pub fn last_non_empty_above_prompt_box(content: &str) -> &str {
     above_prompt_box(content).lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("")
 }
 
+/// `current_shell_block`: the last `!` shell-command block above the
+/// composer — from its `! cmd` line to the box's edge. Older blocks' retained
+/// controls stay outside the slice; "" when no `!` block is on screen.
+pub fn current_shell_block(content: &str) -> &str {
+    let above = above_prompt_box(content);
+    let lines: Vec<&str> = above.lines().collect();
+    let Some(at) = lines.iter().rposition(|l| l.starts_with("! ")) else { return "" };
+    &above[line_offset(above, at)..]
+}
+
 // --- Codex prompt/block markers ------------------------------------------
 
 /// `›` alone or starting a line: the Codex prompt.

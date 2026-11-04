@@ -386,6 +386,32 @@ fn codex_command_approval_is_blocked_under_any_title() {
     }
 }
 
+/// A `!` block's live controls only count inside the current (last) block:
+/// retained `ctrl+b`/timer text from an older, finished shell must not keep
+/// the screen working. Composed from captured lines, not invented text.
+#[test]
+fn retained_shell_controls_from_an_older_block_are_not_working() {
+    fn block<'s>(screen: &'s str, from: &str, to: &str) -> &'s str {
+        let start = screen.find(from).unwrap();
+        let end = screen[start..].find(to).map(|i| start + i + to.len()).unwrap();
+        &screen[start..end]
+    }
+    let running = fixture("claude-bash-running.txt");
+    let finished = fixture("claude-bash-finished.txt");
+    let composer = &finished[finished.find("───").unwrap()..];
+    let stale = format!(
+        "{}\n{}\n{}",
+        block(&running, "! ", "(ctrl+b to run in background)"), // retained controls
+        block(&finished, "! ", "… +27 lines"),                  // the current, finished block
+        composer,
+    );
+    let m = bundled("claude").unwrap();
+    let i = input(&stale);
+    assert_eq!(manifest::Region::CurrentShellBlock.extract(&i), format!("{}\n", block(&finished, "! ", "… +27 lines")));
+    let d = detect(&m, &i);
+    assert_eq!(d.state, State::Idle, "stale controls must not win (rule: {:?})", d.rule);
+}
+
 /// A Codex title names who is running — it is not readiness evidence. An
 /// empty or non-prompt screen stays Unknown until captured readiness
 /// evidence exists; question controls get `question`, permission controls
