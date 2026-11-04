@@ -75,6 +75,9 @@ pub struct State {
     pub stitched: HashMap<u32, (u64, crate::stitch::Capture)>,
     /// Per-terminal screen-detection state for `watch_screen_status` (fork).
     pub screen_status: HashMap<u32, crate::screen_status::ScreenWatch>,
+    /// The last terminal id a detection pass examined: passes resume after it
+    /// and wrap, so terminals past the per-pass cap get their turn (fork).
+    pub screen_cursor: u32,
     /// Every holder we talk to: one of our build takes new terminals, older ones drain.
     pub holders: Vec<Link>,
     pub pending: HashMap<u32, oneshot::Sender<Result<crate::terminals::Terminal, String>>>,

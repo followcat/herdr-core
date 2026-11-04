@@ -950,6 +950,33 @@ async fn the_worker_reads_the_agent_stored_at_observation() {
     remove_root(&root);
 }
 
+#[tokio::test(start_paused = true)]
+async fn every_terminal_gets_its_turn_even_past_the_pass_cap() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let ids: Vec<u32> = (0..40)
+        .map(|_| {
+            let (id, _frames) = screen_agent(&core, "devin");
+            core.output(&mut core.lock(), id, b"READY>\r\n");
+            id
+        })
+        .collect();
+    core.screen_status_pass(&catalog).await; // pass 1: the first 32 snapshots
+    // All 40 keep producing output: a lowest-first scan would re-pick the
+    // same 32 forever and starve the rest, pending idle confirms included.
+    for id in &ids {
+        core.output(&mut core.lock(), *id, b"READY>\r\n");
+    }
+    core.screen_status_pass(&catalog).await; // pass 2: the remaining 8, then wraps
+    tokio::time::advance(Duration::from_millis(1600)).await;
+    core.screen_status_pass(&catalog).await; // pass 3: unchanged screens — every due idle confirms
+    for id in &ids {
+        assert_eq!(word(&core, *id).as_deref(), Some("idle"), "terminal {id} was never reached");
+    }
+    drop(core);
+    remove_root(&root);
+}
+
 #[test]
 fn nothing_under_the_state_lock_identifies() {
     // `identify` reads the filesystem (`canonicalize` for shims); everything

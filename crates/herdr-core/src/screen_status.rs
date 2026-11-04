@@ -12,7 +12,6 @@
 use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect};
 use crate::foreground::Foreground;
 use crate::runtime::{Core, State};
-use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
@@ -103,16 +102,29 @@ impl Core {
     }
 
     /// Every terminal that needs work this pass, one terminal per lock
-    /// acquisition. Side facts under the same lock: withdrawal on foreground
-    /// loss, the unchanged-screen idle confirm, stale-cache cleanup.
+    /// acquisition, rotating on `State::screen_cursor` so terminals past
+    /// `MAX_PER_PASS` are reached within ⌈terminals/cap⌉ passes — including
+    /// their due idle confirms, which step performs under the same lock.
     /// `try_lock` keeps the pass bounded — a busy core just waits a tick.
     pub(crate) fn screen_status_collect(&self, catalog: &Catalog) -> Vec<Snap> {
         let mut out = Vec::new();
-        let mut processed = HashSet::new();
+        let mut scanned = 0usize;
         while out.len() < MAX_PER_PASS {
             let Ok(mut st) = self.state.try_lock() else { break };
-            let Some(id) = st.reg.terminals.keys().find(|id| !processed.contains(*id)).copied() else { break };
-            processed.insert(id);
+            if scanned >= st.reg.terminals.len() {
+                break;
+            }
+            let cursor = st.screen_cursor;
+            let id = st
+                .reg
+                .terminals
+                .range((std::ops::Bound::Excluded(cursor), std::ops::Bound::Unbounded))
+                .next()
+                .or_else(|| st.reg.terminals.range(..=cursor).next())
+                .map(|(id, _)| *id);
+            let Some(id) = id else { break };
+            st.screen_cursor = id;
+            scanned += 1;
             if let Some(snap) = self.step(&mut st, id, catalog) {
                 out.push(snap);
             }
