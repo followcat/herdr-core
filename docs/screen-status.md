@@ -37,12 +37,16 @@ Keep these apart; conflating them is where wrong behavior hides.
   through the same `status_changed` path as a native report. Inferred
   records carry `"source": "screen"`; native records have no `source` field.
   The field is an additive generation-1 extension: old clients ignore it and
-  `released.openrpc.json` stays compatible.
-- **Interrupt-key selection.** Callers that branch on `reported` — input
-  observation, which key interrupts the program, note delivery — keep seeing
-  "this program never reported" for silent agents. Inference must not change
-  what interrupts or observations do, so it never sets `reported` and never
-  makes an inferred record look native.
+  `released.openrpc.json` stays compatible. Phase 2 therefore moves the
+  *availability* checks that today read `reported` — input observation
+  (`input.rs`) and note delivery (`notes.rs::can_take_note`) — onto "native
+  or inferred status": a silent agent whose screen says it is working can
+  observe its input and take a note just like a reporting one.
+- **Interrupt-key selection.** `reported` stays what it means — "the program
+  itself reported" — and keeps deciding which key interrupts a program and
+  whether a program claims input. Inference never sets `reported`, so an
+  inferred status can change what callers *see* without ever changing which
+  keys a program gets.
 
 ## Inputs
 
