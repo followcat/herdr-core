@@ -514,7 +514,13 @@ use crate::foreground::Foreground;
 use catalog::{Catalog, Limits};
 
 fn fg(name: &str, argv: &[&str]) -> Foreground {
-    Foreground { pid: 1, name: name.into(), argv: argv.iter().map(|s| s.to_string()).collect(), cwd: "/tmp".into() }
+    Foreground {
+        pid: 1,
+        name: name.into(),
+        argv: argv.iter().map(|s| s.to_string()).collect(),
+        cwd: "/tmp".into(),
+        agent: None,
+    }
 }
 
 #[test]

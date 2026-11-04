@@ -9,7 +9,7 @@
 //! `reported` ends inference for the program's lifetime, and
 //! `Core::report_status` invalidates pending work on any native report.
 
-use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect, identify};
+use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect};
 use crate::foreground::Foreground;
 use crate::runtime::{Core, State};
 use std::collections::HashSet;
@@ -124,13 +124,13 @@ impl Core {
     /// unchanged-screen confirm, or an owned snapshot for the off-lock pass.
     fn step(&self, st: &mut State, id: u32, catalog: &Catalog) -> Option<Snap> {
         // Facts first; the terminal borrow ends before anything mutates.
-        let Some((live, reported, agent, program, fg_pid)) = st.reg.terminals.get(&id).map(|t| {
+        let Some((live, reported, agent, program, foreground)) = st.reg.terminals.get(&id).map(|t| {
             (
                 t.is_live(),
                 t.reported,
-                t.foreground.as_ref().and_then(identify),
+                t.foreground.as_ref().and_then(|f| f.agent),
                 t.pid.map(|pid| (pid, t.program_started_ms)),
-                t.foreground.as_ref().map(|f| f.pid),
+                t.foreground.as_ref().map(|f| (f.pid, f.agent)),
             )
         }) else {
             st.screen_status.remove(&id);
@@ -187,13 +187,7 @@ impl Core {
         let screen = st.screens.get(&id).expect("checked above");
         Some(Snap {
             id,
-            token: Token {
-                program,
-                foreground: fg_pid.map(|pid| (pid, Some(agent))),
-                seq,
-                size,
-                manifest: Arc::as_ptr(&manifest) as usize,
-            },
+            token: Token { program, foreground, seq, size, manifest: Arc::as_ptr(&manifest) as usize },
             manifest,
             rows: screen.screen_rows(),
             title: screen.title(),
@@ -206,10 +200,10 @@ impl Core {
     pub(crate) fn screen_status_commit(&self, catalog: &Catalog, snap: Snap, detection: Detection) {
         let Ok(mut st) = self.state.try_lock() else { return };
         let Some(t) = st.reg.terminals.get(&snap.id) else { return };
-        let agent = t.foreground.as_ref().and_then(identify);
+        let agent = t.foreground.as_ref().and_then(|f| f.agent);
         let now = Token {
             program: t.pid.map(|pid| (pid, t.program_started_ms)),
-            foreground: t.foreground.as_ref().map(|f| (f.pid, agent)),
+            foreground: t.foreground.as_ref().map(|f| (f.pid, f.agent)),
             seq: st.output_seq.get(&snap.id).copied().unwrap_or(0),
             size: st.screens.get(&snap.id).map_or((0, 0), |s| s.size()),
             manifest: agent.and_then(|a| catalog.get(a)).map_or(0, |m| Arc::as_ptr(&m) as usize),
@@ -269,7 +263,7 @@ impl Core {
     /// leader-pid change drops cached work and withdraws the old owner's
     /// verdict — process loss never means "done". A cwd move alone keeps both.
     pub(crate) fn foreground_changed(&self, st: &mut State, id: u32, was: Option<&Foreground>) {
-        let key = |f: Option<&Foreground>| f.map(|f| (f.pid, identify(f)));
+        let key = |f: Option<&Foreground>| f.map(|f| (f.pid, f.agent));
         if key(was) == key(st.reg.terminals.get(&id).and_then(|t| t.foreground.as_ref())) {
             return;
         }

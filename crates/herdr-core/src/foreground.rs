@@ -17,6 +17,13 @@ pub struct Foreground {
     pub argv: Vec<String>,
     /// Its working directory now (resolved by the OS).
     pub cwd: String,
+    /// The agent identified when this foreground was observed (fork): `about`
+    /// runs `identify` — and its filesystem reads — off the runtime lock, so
+    /// code under `Core.state` only ever reads this stored field. Skipped on
+    /// the wire: a runtime fact, recomputed on each observation.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub agent: Option<&'static str>,
 }
 
 /// The facts about `pid`, if it is still there to read.
@@ -27,7 +34,9 @@ pub fn about(pid: i32) -> Option<Foreground> {
     let argv =
         cmdline.split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
     let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?.display().to_string();
-    Some(Foreground { pid, name, argv, cwd })
+    let mut fg = Foreground { pid, name, argv, cwd, agent: None };
+    fg.agent = crate::detect::identify(&fg);
+    Some(fg)
 }
 
 /// A pseudo console has no foreground group: this is the terminal's first
@@ -99,7 +108,9 @@ pub fn about(pid: i32) -> Option<Foreground> {
         })
         .collect();
     unsafe { LocalFree(list.cast()) };
-    Some(Foreground { pid, name, argv, cwd })
+    let mut fg = Foreground { pid, name, argv, cwd, agent: None };
+    fg.agent = crate::detect::identify(&fg);
+    Some(fg)
 }
 
 #[cfg(target_os = "macos")]
@@ -114,7 +125,9 @@ pub fn about(pid: i32) -> Option<Foreground> {
     }
     let path = unsafe { std::ffi::CStr::from_ptr(vnode.pvi_cdir.vip_path.as_ptr().cast()) };
     let (argv, _) = procargs(pid)?;
-    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned() })
+    let mut fg = Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), agent: None };
+    fg.agent = crate::detect::identify(&fg);
+    Some(fg)
 }
 
 /// KERN_PROCARGS2: argc, the executable path, the arguments, then the

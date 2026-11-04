@@ -651,7 +651,15 @@ fn test_detect_catalog() -> crate::detect::Catalog {
 }
 
 fn agent(name: &str) -> crate::foreground::Foreground {
-    crate::foreground::Foreground { pid: 100, name: name.into(), argv: vec![name.into()], cwd: "/work".into() }
+    let mut fg = crate::foreground::Foreground {
+        pid: 100,
+        name: name.into(),
+        argv: vec![name.into()],
+        cwd: "/work".into(),
+        agent: None,
+    };
+    fg.agent = crate::detect::identify(&fg); // what `about()` saw at observation
+    fg
 }
 
 /// A live terminal on a fake holder whose foreground identifies as `agent`.
@@ -922,6 +930,33 @@ async fn matching_runs_off_the_runtime_lock() {
     assert_eq!(word(&core, id).as_deref(), Some("blocked"));
     drop(core);
     remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_worker_reads_the_agent_stored_at_observation() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = terminal_on_fake_holder(&core);
+    // `about()` identified devin once; these process facts no longer identify
+    // (an uninstalled shim, a name nothing knows). The stored field stands.
+    let mut fg = agent("totally-unknown-tool");
+    assert_eq!(fg.agent, None, "nothing in this record identifies as devin");
+    fg.agent = Some("devin");
+    core.lock().reg.terminals.get_mut(&id).unwrap().foreground = Some(fg);
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"), "detection reads the stored agent");
+    drop(core);
+    remove_root(&root);
+}
+
+#[test]
+fn nothing_under_the_state_lock_identifies() {
+    // `identify` reads the filesystem (`canonicalize` for shims); everything
+    // under `Core.state` — worker, commit, `foreground_changed` — reads the
+    // `Foreground.agent` stored at observation instead.
+    let src = include_str!("../screen_status.rs");
+    assert!(!src.contains("identify"), "screen_status must not call identify under Core.state");
 }
 
 /// Holder threads can keep the core, and so its registry writer, alive a
