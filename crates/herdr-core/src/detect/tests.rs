@@ -528,6 +528,11 @@ fn interpreter_options_parse_per_runtime() {
         ("python3", &["python3", "-Wignore", "-m", "opencode"], Some("opencode")),
         // node booleans accept `=value`; deno needs `run` and allows families.
         ("node", &["node", "--inspect-brk=9229", "/opt/codex/codex.js"], Some("codex")),
+        // Node 24 switches: `--entry-url` takes no value, `--no-*` are all switches.
+        ("node", &["node", "--entry-url", "file:///tmp/app.js", "/opt/codex/codex.js"], None),
+        ("node", &["node", "--entry-url", "file:///opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--no-deprecation", "/opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--allow-fs-read=/etc", "/opt/claude/claude.js"], Some("claude")),
         ("deno", &["deno", "run", "--allow-read=/tmp", "/opt/devin/devin-cli.js"], Some("devin")),
         ("deno", &["deno", "/opt/devin/devin-cli.js"], None),
         ("bun", &["bun", "--watch", "/usr/lib/node_modules/opencode-ai/dist/index.js"], Some("opencode")),
