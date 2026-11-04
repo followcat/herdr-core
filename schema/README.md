@@ -217,3 +217,8 @@ A terminal's status is whatever its program reported through OSC 7501, the
 Program Status Protocol (`idle`, `working`,
 `done`, `blocked`, `error`, ...), stored as reported. hc never infers status
 from the screen. Programs that don't speak 7501 have no status.
+
+> **followcat fork:** this branch infers status from the screen for a fixed
+> allowlist of agents only while their program has never reported. Such
+> records carry `"source": "screen"`; native records carry no `source`.
+> See [docs/screen-status.md](../docs/screen-status.md).

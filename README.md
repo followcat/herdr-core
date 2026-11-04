@@ -102,6 +102,10 @@ An agent can say it is working, done, blocked, or in error through OSC 7501, the
 Core stores what it reports. It does not guess from screen text or recognize agent brands.
 A program that does not report status has none.
 
+> **followcat fork:** this branch adds a screen-detection fallback for a
+> fixed allowlist of agents that never speak 7501, marked `"source": "screen"`.
+> Native reports always win. See [docs/screen-status.md](docs/screen-status.md).
+
 Use `hc get review` for a snapshot or `hc events` to follow changes.
 
 ## Build your own client

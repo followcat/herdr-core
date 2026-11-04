@@ -215,6 +215,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
 - State is `live` or `finished`. Status comes from the program's OSC 7501
   reports: `idle`, `working`, `done`, `blocked`, `error`; plain programs
   report none. Do not guess status from screen text.
+  In the followcat fork, a small allowlist of agents that never speak 7501
+  get a screen-inferred status instead (`"source": "screen"` on the record);
+  a native report always wins.
 - `blocked` means a person is needed (permission or a question): read the
   screen and ask your user. `send` refuses unless `--force`; don't use it to
   bypass a permission decision. `error`: read why, then send or kill.
