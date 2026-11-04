@@ -977,6 +977,27 @@ async fn every_terminal_gets_its_turn_even_past_the_pass_cap() {
     remove_root(&root);
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_poisoned_state_lock_still_detects_and_commits() {
+    let (core, root) = test_core();
+    let catalog = test_detect_catalog();
+    let (id, _frames) = screen_agent(&core, "devin");
+    core.output(&mut core.lock(), id, b"NEED YES\r\n");
+    // A holder path panics while holding the state mutex: it is poisoned now.
+    // `Core::lock()` recovers from that; a bare try_lock would skip forever.
+    let c = core.clone();
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        let _guard = c.state.lock().unwrap();
+        panic!("a holder bug");
+    }));
+    assert!(panicked.is_err());
+    assert!(core.state.is_poisoned());
+    core.screen_status_pass(&catalog).await;
+    assert_eq!(word(&core, id).as_deref(), Some("blocked"), "detection survives a poisoned lock");
+    drop(core);
+    remove_root(&root);
+}
+
 #[test]
 fn nothing_under_the_state_lock_identifies() {
     // `identify` reads the filesystem (`canonicalize` for shims); everything

@@ -105,12 +105,12 @@ impl Core {
     /// acquisition, rotating on `State::screen_cursor` so terminals past
     /// `MAX_PER_PASS` are reached within ⌈terminals/cap⌉ passes — including
     /// their due idle confirms, which step performs under the same lock.
-    /// `try_lock` keeps the pass bounded — a busy core just waits a tick.
+    /// `self.lock()` like every other path: it recovers a poisoned mutex.
     pub(crate) fn screen_status_collect(&self, catalog: &Catalog) -> Vec<Snap> {
         let mut out = Vec::new();
         let mut scanned = 0usize;
         while out.len() < MAX_PER_PASS {
-            let Ok(mut st) = self.state.try_lock() else { break };
+            let mut st = self.lock();
             if scanned >= st.reg.terminals.len() {
                 break;
             }
@@ -210,7 +210,7 @@ impl Core {
     /// longer holds (redraw, resize, agent change, a native report racing
     /// us) or the terminal went ineligible. Applies at most one change.
     pub(crate) fn screen_status_commit(&self, catalog: &Catalog, snap: Snap, detection: Detection) {
-        let Ok(mut st) = self.state.try_lock() else { return };
+        let mut st = self.lock();
         let Some(t) = st.reg.terminals.get(&snap.id) else { return };
         let agent = t.foreground.as_ref().and_then(|f| f.agent);
         let now = Token {
