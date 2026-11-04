@@ -463,6 +463,18 @@ fn shell_controls_must_be_the_last_transcript_content() {
         assert_eq!(d.state, State::Working, "{name} (rule: {:?})", d.rule);
     }
 
+    // The progress alternative spans a whole line: text before or after the
+    // timer substring is finished evidence, not live progress.
+    let marker = done.lines().next().unwrap().chars().next().unwrap(); // '⏺'
+    let finished_reply =
+        format!("{}\n{}\n     {marker} Finished: {}\n\n{}", shell[0], controls, progress.trim(), composer);
+    let d = detect(&m, &input(&finished_reply));
+    assert_eq!(d.state, State::Idle, "a ⏺ reply quoting the timer defeats the controls (rule: {:?})", d.rule);
+    let done_tail = finished.lines().next().unwrap().split_once('·').unwrap().1.trim(); // "done 10:02 am"
+    let collapsed_done = format!("{}\n{}\n     … +27 lines (7s) · {done_tail}\n\n{}", shell[0], controls, composer);
+    let d = detect(&m, &input(&collapsed_done));
+    assert_eq!(d.state, State::Idle, "a collapse tail with a timer still defeats the controls (rule: {:?})", d.rule);
+
     // A `!` draft inside the composer is input, not a shell block: the
     // detection is unchanged.
     let drafted = finished.replacen("\n❯\n", "\n❯ ! ls -la\n", 1);

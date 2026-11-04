@@ -75,16 +75,17 @@ visible_working = true
 # hint and an elapsed timer — but only in the *current* (last) `!` block, and
 # only while those controls are the last transcript content above the
 # composer. The second gate anchors on the block's last control line and
-# requires everything after it — up to the composer — to be blank lines,
-# queued input (`❯ <text>`, `ctrl+enter to send now`, `Press up to edit
-# queued messages`) or the block's own timer-bearing `+N lines (Ns)` progress
-# line. A `⏺` reply, a `✻ … done` line, a new `!` block or any tool output
-# after the controls means the block finished, and a collapsed `… +N lines`
-# tail never matches the timer-bearing alternative because it has no `(Ns)`.
+# requires every line after it — up to the composer — to be entirely one of:
+# a blank line, a queued input line (`❯ <text>`, `ctrl+enter to send now`,
+# `Press up to edit queued messages`) or the block's own progress line whose
+# whole line is `(… )?+N lines (Ns)`. Nothing else may sit on those lines:
+# `⏺ Finished: +3 lines (7s)`, `… +27 lines (7s) · done 10:02 am`, a new `!`
+# block or any tool output all mean the block finished, and a collapsed
+# `… +N lines` tail never matches because it has no `(Ns)`.
 contains = ["ctrl+b to run in background"]
 line_regex = ['\(\d+[smh](?:\s|·|\))']
 regex = [
-  '[\s\S]*ctrl\+b to run in background[^\n]*(?:\n(?:(?:[ \t]*(?:❯[^\n]*)?|[^\n]*(?:ctrl\+enter to send now|Press up to edit queued messages|\+\d+ lines \(\d+[smh])[^\n]*)\n)*(?:[ \t]*(?:❯[^\n]*)?|[^\n]*(?:ctrl\+enter to send now|Press up to edit queued messages|\+\d+ lines \(\d+[smh])[^\n]*))?\z',
+  '[\s\S]*ctrl\+b to run in background[^\n]*(?:\n(?:(?:[ \t]*|[ \t]*❯[^\n]*|[ \t]*ctrl\+enter to send now[ \t]*|[ \t]*Press up to edit queued messages[ \t]*|[ \t]*(?:…[ \t]*)?\+\d+ lines \(\d+s\)[ \t]*)\n)*(?:[ \t]*|[ \t]*❯[^\n]*|[ \t]*ctrl\+enter to send now[ \t]*|[ \t]*Press up to edit queued messages[ \t]*|[ \t]*(?:…[ \t]*)?\+\d+ lines \(\d+s\)[ \t]*))?\z',
 ]
 
 [[rules]]
