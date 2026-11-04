@@ -586,15 +586,34 @@ fn interpreter_options_parse_per_runtime() {
         ("python3", &["python3", "-Wignore", "-m", "opencode"], Some("opencode")),
         // node booleans accept `=value`; deno needs `run` and allows families.
         ("node", &["node", "--inspect-brk=9229", "/opt/codex/codex.js"], Some("codex")),
-        // Node 24 switches: `--entry-url` takes no value, `--no-*` are all switches.
+        // Node 24 switches: `--entry-url` takes no value; `--no-<x>` passes
+        // only as the negation of a known boolean `--<x>` (node rejects the
+        // rest), so `--no-deprecation`/`--no-warnings` identify but an
+        // invented negation fails closed.
         ("node", &["node", "--entry-url", "file:///tmp/app.js", "/opt/codex/codex.js"], None),
         ("node", &["node", "--entry-url", "file:///opt/codex/codex.js"], Some("codex")),
         ("node", &["node", "--no-deprecation", "/opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--no-experimental-strip-types", "/opt/claude/claude.js"], Some("claude")),
+        ("node", &["node", "--no-such-hc-review-option", "/opt/codex/codex.js"], None),
         ("node", &["node", "--allow-fs-read=/etc", "/opt/claude/claude.js"], Some("claude")),
+        // Non-entrypoint modes: a package script, test patterns or inline
+        // source are never the agent's file.
+        ("node", &["node", "--run", "build", "/opt/codex/codex.js"], None),
+        ("node", &["node", "--test", "/opt/codex/codex.js"], None),
+        ("node", &["node", "-e", "1", "/opt/codex/codex.js"], None),
+        ("node", &["node", "-c", "/opt/codex/codex.js"], None),
+        // V8-inherited flags take `=` only: the separate form is rejected
+        // by node, fails closed and never consumes the next argument.
+        ("node", &["node", "--max-old-space-size", "512", "/opt/codex/codex.js"], None),
+        ("node", &["node", "--max-old-space-size=512", "/opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--stack-size=984", "/opt/devin/devin-cli.js"], Some("devin")),
+        // `--policy` is not a Node 24 option at all.
+        ("node", &["node", "--policy", "/opt/codex/codex.js"], None),
         ("deno", &["deno", "run", "--allow-read=/tmp", "/opt/devin/devin-cli.js"], Some("devin")),
         ("deno", &["deno", "/opt/devin/devin-cli.js"], None),
         ("bun", &["bun", "--watch", "/usr/lib/node_modules/opencode-ai/dist/index.js"], Some("opencode")),
         // An option's value is not an entrypoint, even when it names an agent.
+        ("node", &["node", "--title", "/opt/codex/codex.js", "/tmp/app.js"], None),
         ("node", &["node", "--icu-data-dir", "/opt/codex", "app.js"], None),
         ("node", &["node", "--require", "/opt/claude/register.js"], None),
         ("python3", &["python3", "-X", "devin", "-m", "venv"], None),

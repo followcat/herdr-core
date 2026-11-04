@@ -133,19 +133,28 @@ fn is_python(name: &str) -> bool {
 struct Runtime {
     /// A subcommand that must precede the flags (`deno run`).
     subcommand: Option<&'static str>,
-    /// Flags that evaluate inline source or answer a query — no entrypoint.
+    /// Flags that evaluate inline source, run a non-file mode or answer a
+    /// query — there is no script entrypoint (`-e`, `--run`, `--test`).
     eval: &'static [&'static str],
     /// Flags taking a module/package name (`-m`, attached or next arg).
     module: &'static [&'static str],
     /// Flags that consume the next argv item as their value.
     value: &'static [&'static str],
-    /// Flags taking no value (long forms still accept `=value`).
+    /// Flags whose value is only accepted attached (`--flag=value`); the
+    /// separate form is rejected by the interpreter, so a bare match fails
+    /// closed and the next argv item is never its value.
+    eq_value: &'static [&'static str],
+    /// Flags taking no value (long forms still accept `=value`). A `--no-<x>`
+    /// switch also passes when `--<x>` itself is listed here.
     boolean: &'static [&'static str],
 }
 
-// Flag arities checked against `node --help` on Node 24.11.1: `--entry-url`
-// is a switch, every `--no-*` negation is a switch, and `--allow-fs-*` is the
-// only permission flag family that takes a value.
+// Flag arities checked against `node --help` and option probing on Node
+// 24.11.1: `--entry-url` is a switch, `--no-<x>` is the negation of the
+// boolean `--<x>` (there is no free `--no-*` family — node rejects unknown
+// negations), V8-inherited size flags only accept `=`, `--run`/`--test` have
+// no script entrypoint, and `--allow-fs-*` is the only permission family
+// that takes a value. `--policy` is not a Node 24 option at all.
 const NODE: Runtime = Runtime {
     subcommand: None,
     eval: &[
@@ -155,6 +164,8 @@ const NODE: Runtime = Runtime {
         "--print",
         "-c",
         "--check",
+        "--test",
+        "--run",
         "-v",
         "--version",
         "-h",
@@ -176,7 +187,6 @@ const NODE: Runtime = Runtime {
         "--icu-data-dir",
         "--openssl-config",
         "--redirect-warnings",
-        "--policy",
         "--watch-path",
         "--watch-kill-signal",
         "--env-file",
@@ -219,7 +229,6 @@ const NODE: Runtime = Runtime {
         "--experimental-sea-config",
         "--localstorage-file",
         "--max-http-header-size",
-        "--max-old-space-size",
         "--max-old-space-size-percentage",
         "--network-family-autoselection-attempt-timeout",
         "--secure-heap",
@@ -233,10 +242,12 @@ const NODE: Runtime = Runtime {
         "--unhandled-rejections",
         "--use-largepages",
         "--v8-pool-size",
-        "--run",
         "--allow-fs-*",
     ],
+    // V8-inherited options reject the separate form outright.
+    eq_value: &["--max-heap-size", "--max-old-space-size", "--max-semi-space-size", "--stack-size"],
     boolean: &[
+        "--addons",
         "--allow-addons",
         "--allow-child-process",
         "--allow-wasi",
@@ -252,12 +263,13 @@ const NODE: Runtime = Runtime {
         "--interpreted-frames-native-stack",
         "--watch",
         "--watch-preserve-output",
-        "--test",
         "--test-only",
         "--test-force-exit",
         "--test-update-snapshots",
         "--jitless",
+        "--harmony",
         "--insecure-http-parser",
+        "--napi-modules",
         "--permission",
         "--frozen-intrinsics",
         "--expose-gc",
@@ -268,6 +280,8 @@ const NODE: Runtime = Runtime {
         "--track-heap-objects",
         "--zero-fill-buffers",
         "--pending-deprecation",
+        "--deprecation",
+        "--warnings",
         "--throw-deprecation",
         "--report-compact",
         "--report-exclude-env",
@@ -296,6 +310,11 @@ const NODE: Runtime = Runtime {
         "--force-fips",
         "--force-context-aware",
         "--force-node-api-uncaught-exceptions-policy",
+        "--async-context-frame",
+        "--extra-info-on-fatal-exception",
+        "--force-async-hooks-checks",
+        "--global-search-paths",
+        "--network-family-autoselection",
         "--disable-sigusr1",
         "--disable-wasm-trap-handler",
         "--node-memory-debug",
@@ -314,7 +333,10 @@ const NODE: Runtime = Runtime {
         "--experimental-test-module-mocks",
         "--experimental-worker-inspection",
         "--experimental-default-config-file",
-        "--no-*",
+        "--experimental-global-navigator",
+        "--experimental-repl-await",
+        "--experimental-sqlite",
+        "--experimental-websocket",
     ],
 };
 
@@ -323,6 +345,7 @@ const BUN: Runtime = Runtime {
     eval: &["-e", "--eval", "-p", "--print"],
     module: &[],
     value: &["-r", "--require", "--preload", "--import", "--define", "--env-file", "--cwd"],
+    eq_value: &[],
     boolean: &["--watch", "--hot", "--smol", "-b", "--bun", "-i", "--inspect", "--inspect-brk", "--inspect-wait"],
 };
 
@@ -346,6 +369,7 @@ const DENO: Runtime = Runtime {
         "--v8-flags",
         "--inspect-port",
     ],
+    eq_value: &[],
     boolean: &[
         "-A",
         "--allow-all",
@@ -375,6 +399,7 @@ const PYTHON: Runtime = Runtime {
     eval: &["-c", "-V", "--version", "-h", "--help", "--help-env", "--help-xoptions", "--help-all"],
     module: &["-m"],
     value: &["-W", "-X", "--check-hash-based-pycs"],
+    eq_value: &[],
     boolean: &[
         "-B",
         "-b",
@@ -400,6 +425,7 @@ const SHELL: Runtime = Runtime {
     eval: &["-c"],
     module: &[],
     value: &[],
+    eq_value: &[],
     // Every other flag is unknown: `-l`, `-s` and friends change how the next
     // word is read, so a script path behind them is not safe to classify.
     boolean: &[],
@@ -437,10 +463,26 @@ fn script_arg_agent(argv: &[String], rt: &Runtime) -> Option<&'static str> {
             }
             continue;
         }
+        if let Some(inline) = rt.eq_value.iter().find_map(|f| flag(arg, f, true)) {
+            // `=`-only flags: attached is fine, bare means the interpreter
+            // would reject the option — fail closed, never consume.
+            if inline.is_some() {
+                continue;
+            }
+            return None;
+        }
         // Attached values only exist for long booleans (`--inspect=9229`);
         // a short flag with a tail is a different option entirely.
         if rt.boolean.iter().any(|f| flag(arg, f, f.starts_with("--")).is_some()) {
             continue;
+        }
+        // `--no-<x>` stands only as the negation of a known boolean `--<x>`;
+        // node rejects every other negation, so it fails closed here too.
+        if let Some(rest) = arg.strip_prefix("--no-") {
+            let positive = format!("--{}", rest.split('=').next().unwrap_or(rest));
+            if rt.boolean.iter().any(|f| flag(&positive, f, true).is_some()) {
+                continue;
+            }
         }
         return None;
     }
