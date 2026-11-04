@@ -103,12 +103,8 @@ impl Core {
             // Nothing can ever be re-proven here: any root the registry
             // restored is withdrawn now, then the worker just stops.
             let mut st = self.lock();
-            let restored: Vec<u32> = st
-                .screen_status
-                .iter()
-                .filter(|(_, w)| w.unconfirmed_until.is_some())
-                .map(|(id, _)| *id)
-                .collect();
+            let restored: Vec<u32> =
+                st.screen_status.iter().filter(|(_, w)| w.unconfirmed_until.is_some()).map(|(id, _)| *id).collect();
             for id in restored {
                 self.inferred_status(&mut st, id, None);
             }

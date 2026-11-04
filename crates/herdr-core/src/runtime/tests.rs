@@ -696,8 +696,7 @@ async fn a_script_named_devin_drives_inference_end_to_end() {
     )
     .unwrap();
     let argv = vec!["/bin/sh".into(), script.display().to_string()];
-    let (pty, mut child) =
-        platform::spawn_pty(&argv, &Default::default(), root.to_str().unwrap(), 80, 24).unwrap();
+    let (pty, mut child) = platform::spawn_pty(&argv, &Default::default(), root.to_str().unwrap(), 80, 24).unwrap();
     let (id, _frames) = terminal_on_fake_holder(&core);
     {
         let mut st = core.lock();
@@ -727,10 +726,7 @@ async fn a_script_named_devin_drives_inference_end_to_end() {
         core.subscribe(
             &mut st,
             crate::events::Filter { terminal: Some(crate::terminals::address(id)), ..Default::default() },
-            crate::events::Sink::Plain {
-                tx,
-                behind: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            },
+            crate::events::Sink::Plain { tx, behind: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)) },
         );
     }
     let words = ["working", "blocked", "working", "idle"];
@@ -759,8 +755,12 @@ async fn a_script_named_devin_drives_inference_end_to_end() {
             // the second working is published, so idle is what ends it.
             let c = core.clone();
             waiting = Some(tokio::spawn(async move {
-                c.wait(id, crate::wait::WaitSpec { output: None, timeout: Duration::from_secs(15), after_turn: None }, None)
-                    .await
+                c.wait(
+                    id,
+                    crate::wait::WaitSpec { output: None, timeout: Duration::from_secs(15), after_turn: None },
+                    None,
+                )
+                .await
             }));
         }
         writer.write_all(b"\n").unwrap(); // acknowledged: print the next state
@@ -778,7 +778,10 @@ async fn a_script_named_devin_drives_inference_end_to_end() {
         }
         (statuses, core.lock().reg.terminals[&id].turn)
     };
-    assert_eq!(statuses, vec![Some("working".into()), Some("blocked".into()), Some("working".into()), Some("idle".into())]);
+    assert_eq!(
+        statuses,
+        vec![Some("working".into()), Some("blocked".into()), Some("working".into()), Some("idle".into())]
+    );
     assert_eq!(turn, 2, "working → blocked → working → idle: two turns, as native counts");
     writer.write_all(b"\n").unwrap(); // let the script exit
     let _ = platform::wait(&mut child);

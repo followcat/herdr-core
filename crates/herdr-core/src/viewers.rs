@@ -244,14 +244,9 @@ impl Core {
             None => {
                 // A withdrawal also ends the unconfirmed window — under it the
                 // root drops without a turn: nothing fresh ever proved it.
-                let unconfirmed =
-                    st.screen_status.get_mut(&id).and_then(|w| w.unconfirmed_until.take()).is_some();
+                let unconfirmed = st.screen_status.get_mut(&id).and_then(|w| w.unconfirmed_until.take()).is_some();
                 let t = st.reg.terminals.get_mut(&id).expect("live terminal");
-                if unconfirmed {
-                    crate::status::withdraw_unconfirmed(t)
-                } else {
-                    crate::status::withdraw_inferred(t)
-                }
+                if unconfirmed { crate::status::withdraw_unconfirmed(t) } else { crate::status::withdraw_inferred(t) }
             }
         };
         if change == crate::status::Change::default() {
