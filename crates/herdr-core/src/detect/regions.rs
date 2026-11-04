@@ -4,8 +4,8 @@
 
 /// `bottom_lines(n)`: the last n lines including empty ones.
 pub fn bottom_lines(content: &str, n: usize) -> &str {
-    let lines: Vec<&str> = content.lines().collect();
-    from_line(content, &lines, lines.len().saturating_sub(n))
+    let count = content.lines().count();
+    from_line(content, count.saturating_sub(n))
 }
 
 /// `bottom_non_empty_lines(n)`: from the n-th-from-last non-blank line on.
@@ -16,7 +16,7 @@ pub fn bottom_non_empty_lines(content: &str, n: usize) -> &str {
     else {
         return "";
     };
-    from_line(content, &lines, start)
+    from_line(content, start)
 }
 
 /// `top_non_empty_lines(n)`: through the n-th non-blank line.
@@ -26,17 +26,15 @@ pub fn top_non_empty_lines(content: &str, n: usize) -> &str {
     else {
         return "";
     };
-    &content[..line_offset(content, &lines, end + 1)]
+    &content[..line_offset(content, end + 1)]
 }
 
 /// `after_last_horizontal_rule`: text under the last ─-ruled line.
 pub fn after_last_horizontal_rule(content: &str) -> &str {
-    let mut offset = 0;
     let mut cut = 0;
-    for line in content.lines() {
-        offset += line.len() + 1;
+    for (i, line) in content.lines().enumerate() {
         if is_rule(line) {
-            cut = offset.min(content.len());
+            cut = line_offset(content, i + 1);
         }
     }
     &content[cut..]
@@ -48,7 +46,7 @@ pub fn prompt_box_body(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
     let Some(top) = second_to_last_rule(&lines) else { return "" };
     let end = lines[top + 1..].iter().position(|l| is_rule(l)).map(|rel| top + 1 + rel).unwrap_or(lines.len());
-    &content[line_offset(content, &lines, top + 1)..line_offset(content, &lines, end)]
+    &content[line_offset(content, top + 1)..line_offset(content, end)]
 }
 
 /// `above_prompt_box`: everything above the composer's top rule; the whole
@@ -56,7 +54,7 @@ pub fn prompt_box_body(content: &str) -> &str {
 pub fn above_prompt_box(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
     match second_to_last_rule(&lines) {
-        Some(top) => &content[..line_offset(content, &lines, top)],
+        Some(top) => &content[..line_offset(content, top)],
         None => content,
     }
 }
@@ -91,7 +89,7 @@ fn current_prompt_index(lines: &[&str]) -> Option<usize> {
 pub fn after_last_prompt_marker(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
     match lines.iter().rposition(|l| prompt_line(l)) {
-        Some(at) => from_line(content, &lines, at + 1),
+        Some(at) => from_line(content, at + 1),
         None => content,
     }
 }
@@ -101,7 +99,7 @@ pub fn after_last_prompt_marker(content: &str) -> &str {
 pub fn before_current_prompt_marker(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
     match current_prompt_index(&lines) {
-        Some(at) => &content[..line_offset(content, &lines, at)],
+        Some(at) => &content[..line_offset(content, at)],
         None => content,
     }
 }
@@ -128,7 +126,7 @@ pub fn after_current_prompt_block_marker(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
     let Some(prompt) = current_prompt_index(&lines) else { return "" };
     let Some(at) = lines[..prompt].iter().rposition(|l| block_marker(l)) else { return "" };
-    from_line(content, &lines, at)
+    from_line(content, at)
 }
 
 // --- helpers --------------------------------------------------------------
@@ -157,10 +155,16 @@ fn second_to_last_rule(lines: &[&str]) -> Option<usize> {
     None
 }
 
-fn from_line<'a>(content: &'a str, lines: &[&str], index: usize) -> &'a str {
-    &content[line_offset(content, lines, index)..]
+fn from_line(content: &str, index: usize) -> &str {
+    &content[line_offset(content, index)..]
 }
 
-fn line_offset(content: &str, lines: &[&str], index: usize) -> usize {
-    lines[..index.min(lines.len())].iter().map(|l| l.len() + 1).sum::<usize>().min(content.len())
+/// The byte offset where line `index` begins, from real `\n` positions.
+/// `lines()` strips `\r\n`, so `line.len() + 1` would drift one byte short
+/// per line on CRLF input and slice mid-line — mid-char on UTF-8 text.
+fn line_offset(content: &str, index: usize) -> usize {
+    if index == 0 {
+        return 0;
+    }
+    content.match_indices('\n').nth(index - 1).map(|(i, _)| i + 1).unwrap_or(content.len())
 }

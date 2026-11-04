@@ -123,6 +123,22 @@ fn regions_slice_the_screen_as_named() {
     }
 }
 
+/// `lines()` eats `\r\n`, so offsets must come from real newline positions:
+/// `len + 1` drifts one byte per line and slices a multi-byte char in half.
+#[test]
+fn crlf_and_unicode_do_not_drift_region_offsets() {
+    let screen = "❯ première ligne\r\n│ résumé ✓\r\n───\r\n❯ en attente";
+    let i = input(screen);
+    assert_eq!(manifest::Region::AfterLastHorizontalRule.extract(&i), "❯ en attente");
+    assert_eq!(manifest::Region::BottomLines(1).extract(&i), "❯ en attente");
+    assert_eq!(manifest::Region::TopNonEmptyLines(1).extract(&i), "❯ première ligne\r\n");
+    assert_eq!(manifest::Region::BottomNonEmptyLines(2).extract(&i), "───\r\n❯ en attente");
+
+    let boxed = "log é\r\n───\r\n❯ typed ü\r\n───\r\nfooter";
+    assert_eq!(manifest::Region::PromptBoxBody.extract(&input(boxed)), "❯ typed ü\r\n");
+    assert_eq!(manifest::Region::AbovePromptBox.extract(&input(boxed)), "log é\r\n");
+}
+
 #[test]
 fn prompt_box_regions_find_the_composer() {
     let screen = "log line\n────\n❯ typed\n────\n footer";
