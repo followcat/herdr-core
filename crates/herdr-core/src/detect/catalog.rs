@@ -24,7 +24,7 @@ pub struct Limits {
 }
 
 /// Largest accepted manifest file; bigger overrides are skipped.
-const MAX_MANIFEST_BYTES: u64 = 1 << 18;
+pub(crate) const MAX_MANIFEST_BYTES: u64 = 1 << 18;
 
 pub struct Catalog {
     manifests: Vec<(String, Arc<Manifest>)>,
@@ -126,9 +126,19 @@ fn load_overrides(
 }
 
 fn read_override(path: &Path) -> Result<Manifest, String> {
-    if std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_MANIFEST_BYTES) {
+    use std::io::Read;
+    // Check before opening: a fifo or device could block the read forever.
+    if !std::fs::metadata(path).map_err(|e| e.to_string())?.is_file() {
+        return Err("not a regular file".to_string());
+    }
+    let mut buf = Vec::new();
+    std::fs::File::open(path)
+        .map_err(|e| e.to_string())?
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| e.to_string())?;
+    if buf.len() as u64 > MAX_MANIFEST_BYTES {
         return Err(format!("over {MAX_MANIFEST_BYTES} bytes"));
     }
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    Manifest::compile(&text)
+    Manifest::compile(&String::from_utf8(buf).map_err(|e| e.to_string())?)
 }

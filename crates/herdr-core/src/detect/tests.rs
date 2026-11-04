@@ -527,6 +527,31 @@ fn disabled_and_limited_config_shape_the_catalog() {
     assert!(only.get("claude-code").is_none(), "aliases do not resolve through get");
 }
 
+/// Overrides are bounded regular files: a `devin.toml` directory or a file
+/// past `MAX_MANIFEST_BYTES` must not be read — the bundled manifest stays.
+#[test]
+fn overrides_are_bounded_regular_files() {
+    let tag = format!("hc-detect-catalog-bounds-{}", std::process::id());
+    let dir = std::env::temp_dir().join(&tag);
+    std::fs::create_dir_all(dir.join("codex.toml")).unwrap();
+    let max = catalog::MAX_MANIFEST_BYTES as usize;
+    std::fs::write(dir.join("devin.toml"), vec![b'#'; max + 1]).unwrap();
+    // Exactly at the bound still loads: a small manifest padded with comments.
+    // ALT_CLAUDE ends with a newline, so the padding stays a comment line.
+    let mut at = ALT_CLAUDE.replace("id = \"claude\"", "id = \"opencode\"").into_bytes();
+    at.resize(max, b'#');
+    std::fs::write(dir.join("opencode.toml"), at).unwrap();
+
+    let cat = Catalog::load(Some(&dir), None);
+    assert!(cat.get("codex").unwrap().rules.len() > 1, "directory keeps bundled codex");
+    assert!(cat.get("devin").unwrap().rules.len() > 1, "oversized keeps bundled devin");
+    assert_eq!(cat.get("opencode").unwrap().rules.len(), 1, "manifest at the bound loads");
+    assert_eq!(cat.warnings.len(), 2, "{:?}", cat.warnings);
+    assert!(cat.warnings.iter().any(|w| w.contains("regular file")), "{:?}", cat.warnings);
+    assert!(cat.warnings.iter().any(|w| w.contains("bytes")), "{:?}", cat.warnings);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// A user override's declared aliases must not shadow another agent or skip
 /// the allowlist — `get` resolves canonical ids exactly.
 #[test]
