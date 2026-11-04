@@ -468,20 +468,19 @@ fn interpreter_options_parse_per_runtime() {
     }
 }
 
+/// The npm `command-code` package's Unix binary is a `cmd` symlink into the
+/// package; only the resolved path may identify it. Windows `cmd.exe` has no
+/// such entrypoint, so the shim check runs where symlinks exist.
+#[cfg(unix)]
 #[test]
 fn command_code_needs_package_evidence_never_a_bare_cmd() {
-    // The npm `command-code` package's Unix binary is `cmd`; only a resolved
-    // path through the package may identify it.
     let shim = std::env::temp_dir().join(format!("hc-detect-cmd-{}", std::process::id()));
     let pkg = shim.join("node_modules/command-code/dist");
     std::fs::create_dir_all(&pkg).unwrap();
     let entry = pkg.join("cli.js");
     std::fs::write(&entry, "// stub").unwrap();
     let link = shim.join("cmd");
-    #[cfg(unix)]
     std::os::unix::fs::symlink(&entry, &link).unwrap();
-    #[cfg(windows)]
-    std::fs::copy(&entry, &link).unwrap();
 
     let link_str = link.to_str().unwrap().to_string();
     assert_eq!(identify(&fg("cmd", &[&link_str])), Some("command-code"), "resolved shim identifies the package");
@@ -491,6 +490,21 @@ fn command_code_needs_package_evidence_never_a_bare_cmd() {
         "script path in the package"
     );
     std::fs::remove_dir_all(&shim).unwrap();
+}
+
+/// A `…/node_modules/command-code/…` entrypoint classifies from the path
+/// alone — the Windows package layout needs no shim. A `cmd` outside the
+/// package, symlink or not, stays unidentified.
+#[test]
+fn command_code_identifies_only_its_package_entrypoints() {
+    for path in [
+        "C:\\Users\\user\\node_modules\\command-code\\dist\\cli.js",
+        "C:/Users/user/node_modules/command-code/dist/cli.js",
+        "/usr/lib/node_modules/command-code/dist/cli.js",
+    ] {
+        assert_eq!(identify(&fg("node", &["node", path])), Some("command-code"), "{path}");
+    }
+    assert_eq!(identify(&fg("cmd", &["C:\\Tools\\cmd"])), None, "a cmd outside the package is not evidence");
 }
 
 // --- the manifest catalog ----------------------------------------------------
