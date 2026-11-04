@@ -73,6 +73,33 @@ fn an_empty_any_passes_and_nested_gates_compose() {
     assert_eq!(detect(&m, &input("a")).state, State::Unknown);
 }
 
+/// A non-empty negative-only gate is meaningful inside a `not` context;
+/// empty gates and the complexity budgets still apply.
+#[test]
+fn nested_negative_gates_compose() {
+    let m = compile(
+        r##"
+        id = "t"
+        [[rules]]
+        id = "r"
+        state = "idle"
+        contains = ["x"]
+        not = [{ not = [{ contains = ["safe"] }] }]
+        "##,
+    );
+    // not[not[safe]] is present-or-absent evidence: "safe" must appear.
+    assert_eq!(detect(&m, &input("x safe")).state, State::Idle);
+    assert_eq!(detect(&m, &input("x")).state, State::Unknown);
+
+    for text in [
+        "id=\"t\"\n[[rules]]\nid=\"r\"\ncontains=[\"x\"]\nnot=[{}]",
+        "id=\"t\"\n[[rules]]\nid=\"r\"\ncontains=[\"x\"]\nnot=[{not=[{}]}]",
+        "id=\"t\"\n[[rules]]\nid=\"r\"\ncontains=[\"x\"]\nall=[{not=[{contains=[\"y\"]}]}]",
+    ] {
+        assert!(Manifest::compile(text).is_err(), "{text}");
+    }
+}
+
 // --- priority and ties ----------------------------------------------------
 
 #[test]

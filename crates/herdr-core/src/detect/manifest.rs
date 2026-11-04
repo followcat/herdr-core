@@ -227,8 +227,9 @@ struct Budget {
 }
 
 impl RawGate {
-    /// Each gate needs a positive matcher unless it is a `not` child (those
-    /// only need any matcher at all).
+    /// In positive context a gate needs a positive matcher; inside a `not`
+    /// any non-empty gate is meaningful (a negated negation still states a
+    /// condition).
     fn has_positive(&self) -> bool {
         !self.contains.is_empty()
             || !self.regex.is_empty()
@@ -241,7 +242,7 @@ impl RawGate {
     }
 }
 
-fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str) -> Result<(), String> {
+fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str, negative: bool) -> Result<(), String> {
     if depth > MAX_GATE_DEPTH {
         return Err(format!("{ctx}: gate depth over {MAX_GATE_DEPTH}"));
     }
@@ -262,17 +263,18 @@ fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str) -
             return Err(format!("{ctx}: matcher over {MAX_MATCHER_CHARS} chars"));
         }
     }
-    if !gate.has_positive() {
+    if negative {
+        if !gate.has_any() {
+            return Err(format!("{ctx}: empty gate"));
+        }
+    } else if !gate.has_positive() {
         return Err(format!("{ctx}: needs a positive matcher"));
     }
     for sub in gate.all.iter().chain(gate.any.iter()) {
-        validate_gate(sub, depth + 1, budget, ctx)?;
+        validate_gate(sub, depth + 1, budget, ctx, negative)?;
     }
     for sub in &gate.not {
-        if !sub.has_any() {
-            return Err(format!("{ctx}: empty not gate"));
-        }
-        validate_gate(sub, depth + 1, budget, ctx)?;
+        validate_gate(sub, depth + 1, budget, ctx, true)?;
     }
     Ok(())
 }
@@ -321,7 +323,7 @@ fn compile_rule(raw: &RawRule, budget: &mut Budget) -> Result<Rule, String> {
     }
     let region = raw.region.trim().parse::<Region>().map_err(|e| at(format!("region {e}")))?;
     let gate_spec = raw.gate();
-    validate_gate(&gate_spec, 0, budget, "gate").map_err(&at)?;
+    validate_gate(&gate_spec, 0, budget, "gate", false).map_err(&at)?;
     let gate = compile_gate(&gate_spec).map_err(&at)?;
     Ok(Rule {
         id: raw.id.clone(),
