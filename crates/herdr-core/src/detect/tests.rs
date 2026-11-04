@@ -438,6 +438,36 @@ fn identifies_interpreter_entrypoints_not_mentions() {
     }
 }
 
+/// Options mean different things per interpreter: attached values, real
+/// value flags, module flags and permission families are handled — an
+/// unknown option or a value that names an agent yields no identification.
+#[test]
+fn interpreter_options_parse_per_runtime() {
+    let cases: &[(&str, &[&str], Option<&str>)] = &[
+        // python `-S` takes no value; `-m` may carry its module attached.
+        ("python3", &["python3", "-S", "-m", "devin_cli"], Some("devin")),
+        ("python3", &["python3", "-mdevin_cli"], Some("devin")),
+        ("python3", &["python3", "-X", "dev", "-m", "codex"], Some("codex")),
+        ("python3", &["python3", "-Wignore", "-m", "opencode"], Some("opencode")),
+        // node booleans accept `=value`; deno needs `run` and allows families.
+        ("node", &["node", "--inspect-brk=9229", "/opt/codex/codex.js"], Some("codex")),
+        ("deno", &["deno", "run", "--allow-read=/tmp", "/opt/devin/devin-cli.js"], Some("devin")),
+        ("deno", &["deno", "/opt/devin/devin-cli.js"], None),
+        ("bun", &["bun", "--watch", "/usr/lib/node_modules/opencode-ai/dist/index.js"], Some("opencode")),
+        // An option's value is not an entrypoint, even when it names an agent.
+        ("node", &["node", "--icu-data-dir", "/opt/codex", "app.js"], None),
+        ("node", &["node", "--require", "/opt/claude/register.js"], None),
+        ("python3", &["python3", "-X", "devin", "-m", "venv"], None),
+        // An unknown option is no evidence — the scan must not guess.
+        ("node", &["node", "--not-a-node-flag", "/opt/codex/codex.js"], None),
+        ("python3", &["python3", "--bogus", "-m", "devin_cli"], None),
+        ("bash", &["bash", "-l", "/opt/devin/devin.sh"], None),
+    ];
+    for (name, argv, want) in cases {
+        assert_eq!(identify(&fg(name, argv)), *want, "{name} {argv:?}");
+    }
+}
+
 #[test]
 fn command_code_needs_package_evidence_never_a_bare_cmd() {
     // The npm `command-code` package's Unix binary is `cmd`; only a resolved
