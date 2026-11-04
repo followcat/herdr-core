@@ -144,17 +144,22 @@ struct Runtime {
     /// separate form is rejected by the interpreter, so a bare match fails
     /// closed and the next argv item is never its value.
     eq_value: &'static [&'static str],
-    /// Flags taking no value (long forms still accept `=value`). A `--no-<x>`
-    /// switch also passes when `--<x>` itself is listed here.
+    /// Flags taking no value (long forms still accept `=value`).
     boolean: &'static [&'static str],
+    /// The interpreter's documented `--no-*` switches, spelled exactly as it
+    /// lists them. Negations never derive from `boolean`: a `--no-<x>` whose
+    /// spelling the interpreter does not document is invalid input even when
+    /// `--<x>` is a real boolean (`node --no-napi-modules` fails on Node 24).
+    negations: &'static [&'static str],
 }
 
 // Flag arities checked against `node --help` and option probing on Node
-// 24.11.1: `--entry-url` is a switch, `--no-<x>` is the negation of the
-// boolean `--<x>` (there is no free `--no-*` family — node rejects unknown
-// negations), V8-inherited size flags only accept `=`, `--run`/`--test` have
-// no script entrypoint, and `--allow-fs-*` is the only permission family
-// that takes a value. `--policy` is not a Node 24 option at all.
+// 24.11.1: `--entry-url` is a switch, the `negations` table is verbatim from
+// `--help` (there is no free `--no-*` family — node rejects unknown
+// negations like `--no-napi-modules` and `--no-node-memory-debug`),
+// V8-inherited size flags only accept `=`, `--run`/`--test` have no script
+// entrypoint, and `--allow-fs-*` is the only permission family that takes a
+// value. `--policy` is not a Node 24 option at all.
 const NODE: Runtime = Runtime {
     subcommand: None,
     eval: &[
@@ -338,6 +343,24 @@ const NODE: Runtime = Runtime {
         "--experimental-sqlite",
         "--experimental-websocket",
     ],
+    // Every `--no-*` Node 24.11.1 documents; other negations are rejected.
+    negations: &[
+        "--no-addons",
+        "--no-async-context-frame",
+        "--no-deprecation",
+        "--no-experimental-detect-module",
+        "--no-experimental-global-navigator",
+        "--no-experimental-repl-await",
+        "--no-experimental-require-module",
+        "--no-experimental-sqlite",
+        "--no-experimental-strip-types",
+        "--no-experimental-websocket",
+        "--no-extra-info-on-fatal-exception",
+        "--no-force-async-hooks-checks",
+        "--no-global-search-paths",
+        "--no-network-family-autoselection",
+        "--no-warnings",
+    ],
 };
 
 const BUN: Runtime = Runtime {
@@ -347,6 +370,7 @@ const BUN: Runtime = Runtime {
     value: &["-r", "--require", "--preload", "--import", "--define", "--env-file", "--cwd"],
     eq_value: &[],
     boolean: &["--watch", "--hot", "--smol", "-b", "--bun", "-i", "--inspect", "--inspect-brk", "--inspect-wait"],
+    negations: &[],
 };
 
 const DENO: Runtime = Runtime {
@@ -375,7 +399,6 @@ const DENO: Runtime = Runtime {
         "--allow-all",
         "--allow-*",
         "--deny-*",
-        "--no-remote",
         "--cached-only",
         "--frozen",
         "--inspect",
@@ -383,15 +406,13 @@ const DENO: Runtime = Runtime {
         "--inspect-wait",
         "--watch",
         "--check",
-        "--no-check",
-        "--no-npm",
-        "--no-prompt",
         "--quiet",
         "-q",
         "--reload",
         "-r",
         "--unstable-*",
     ],
+    negations: &["--no-remote", "--no-check", "--no-npm", "--no-prompt"],
 };
 
 const PYTHON: Runtime = Runtime {
@@ -400,6 +421,7 @@ const PYTHON: Runtime = Runtime {
     module: &["-m"],
     value: &["-W", "-X", "--check-hash-based-pycs"],
     eq_value: &[],
+    negations: &[],
     boolean: &[
         "-B",
         "-b",
@@ -429,6 +451,7 @@ const SHELL: Runtime = Runtime {
     // Every other flag is unknown: `-l`, `-s` and friends change how the next
     // word is read, so a script path behind them is not safe to classify.
     boolean: &[],
+    negations: &[],
 };
 
 /// Walk `argv` after the interpreter: the first positional token is the
@@ -476,13 +499,11 @@ fn script_arg_agent(argv: &[String], rt: &Runtime) -> Option<&'static str> {
         if rt.boolean.iter().any(|f| flag(arg, f, f.starts_with("--")).is_some()) {
             continue;
         }
-        // `--no-<x>` stands only as the negation of a known boolean `--<x>`;
-        // node rejects every other negation, so it fails closed here too.
-        if let Some(rest) = arg.strip_prefix("--no-") {
-            let positive = format!("--{}", rest.split('=').next().unwrap_or(rest));
-            if rt.boolean.iter().any(|f| flag(&positive, f, true).is_some()) {
-                continue;
-            }
+        // Only the interpreter's documented `--no-*` spellings pass — a
+        // negation of a real boolean still fails when the interpreter does
+        // not list it (`--no-napi-modules`, `--no-node-memory-debug`).
+        if rt.negations.iter().any(|f| flag(arg, f, false).is_some()) {
+            continue;
         }
         return None;
     }

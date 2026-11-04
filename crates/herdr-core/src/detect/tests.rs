@@ -599,14 +599,17 @@ fn interpreter_options_parse_per_runtime() {
         // node booleans accept `=value`; deno needs `run` and allows families.
         ("node", &["node", "--inspect-brk=9229", "/opt/codex/codex.js"], Some("codex")),
         // Node 24 switches: `--entry-url` takes no value; `--no-<x>` passes
-        // only as the negation of a known boolean `--<x>` (node rejects the
-        // rest), so `--no-deprecation`/`--no-warnings` identify but an
-        // invented negation fails closed.
+        // only as a spelling `node --help` itself lists (node rejects the
+        // rest), so documented negations identify but an invented one — or
+        // the negation of a boolean node won't negate — fails closed.
         ("node", &["node", "--entry-url", "file:///tmp/app.js", "/opt/codex/codex.js"], None),
         ("node", &["node", "--entry-url", "file:///opt/codex/codex.js"], Some("codex")),
         ("node", &["node", "--no-deprecation", "/opt/codex/codex.js"], Some("codex")),
+        ("node", &["node", "--no-warnings", "/opt/codex/codex.js"], Some("codex")),
         ("node", &["node", "--no-experimental-strip-types", "/opt/claude/claude.js"], Some("claude")),
         ("node", &["node", "--no-such-hc-review-option", "/opt/codex/codex.js"], None),
+        ("node", &["node", "--no-napi-modules", "/opt/codex/codex.js"], None),
+        ("node", &["node", "--no-node-memory-debug", "/opt/codex/codex.js"], None),
         ("node", &["node", "--allow-fs-read=/etc", "/opt/claude/claude.js"], Some("claude")),
         // Non-entrypoint modes: a package script, test patterns or inline
         // source are never the agent's file.
