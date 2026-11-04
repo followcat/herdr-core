@@ -582,6 +582,9 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
         }
         Cmd::Server { action: ServerCmd::Stop } => stop(&paths)?,
         Cmd::Update { from: None, version, force } => {
+            // A fork build never turns into an official release by itself:
+            // updating it is an explicit `hc update --from <binary>`.
+            crate::releases::no_release_for_this_build("hc update")?;
             let this = format!("hc {}", env!("CARGO_PKG_VERSION"));
             if let Some(v) = &version
                 && !force

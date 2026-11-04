@@ -231,6 +231,24 @@ fn a_windows_probe_keeps_native_core_errors() {
 
 #[test]
 fn a_windows_machine_with_git_sh_installs_the_native_build_when_missing() {
+    if !released_build() {
+        // Windows always downloads a release zip: a fork build refuses it
+        // instead of silently replacing itself with an official release.
+        let mut s = Session::new();
+        let wrapper = s.root.join("windows-ssh");
+        std::fs::write(
+            &wrapper,
+            "#!/bin/sh\ncase \"$2\" in 'uname -sm') echo 'MINGW64_NT-10.0 x86_64'; exit 0;; esac\n\
+             echo 'herdr-core is not installed here' >&2\nexit 127\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&wrapper, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        s.env.push(("HC_SSH".into(), wrapper.display().to_string()));
+        let (_, e) = s.err(&["--json", "machine", "add", "windows", "--install"]);
+        assert_eq!(e["error"]["kind"], "refused", "{e}");
+        assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
+        return;
+    }
     for (uname, sh_error, sh_code, missing_error) in [
         ("MINGW64_NT-10.0 x86_64", "", 0, "is not recognized"),
         ("MSYS_NT-10.0 x86_64", "", 0, "is not recognized"),
@@ -422,6 +440,36 @@ fn a_box_without_hc_gets_this_one_when_you_say_yes() {
     assert!(updated["version"].as_str().is_some_and(|v| v.starts_with("hc ")), "{updated}");
     assert_ne!(bare.json(&["server", "status"])["pid"], before, "its core restarted on the new binary");
     wait_until("connected again", || s.json(&["machine", "ls"])["machines"][0]["state"] == "connected");
+}
+
+#[test]
+fn machine_add_install_copies_this_hc_only_where_it_is_missing() {
+    let mut bare = Session::new();
+    bare.bin = bare.root.join("bin/herdr-core"); // nothing there: no hc on that box
+    let rohan = Session::new(); // a compatible core already runs there
+    let mut s = Session::new();
+    s.env.push(fake_ssh(&s, &[("bare", &bare), ("rohan", &rohan)]));
+
+    // A bare same-platform box gets this very binary, bytes and all.
+    let (_, missing) = s.err(&["--json", "machine", "add", "bare"]);
+    assert_eq!(missing["error"]["kind"], "hc_missing");
+    let added = s.json(&["machine", "add", "bare", "--install"]);
+    assert!(added["id"].is_string(), "{added}");
+    let installed = bare.root.join(".local/bin/herdr-core");
+    assert_eq!(std::fs::read(&installed).unwrap(), std::fs::read(BIN).unwrap(), "this hc, byte for byte");
+    wait_until("connected", || s.json(&["machine", "ls"])["machines"][0]["state"] == "connected");
+    s.json(&["machine", "rm", "bare"]);
+    bare.bin = installed; // so it is stopped at the end
+
+    // A box with a compatible core is just added: --install copies nothing
+    // and never restarts what is already there. Replacing it takes
+    // `hc machine update`.
+    let before = rohan.json(&["server", "status"])["pid"].clone();
+    let added = s.json(&["machine", "add", "rohan", "--install"]);
+    assert_eq!(added["id"], rohan.json(&["server", "status"])["core"]["id"], "{added}");
+    assert!(!rohan.root.join(".local/bin/herdr-core").exists(), "nothing copied over a working core");
+    assert_eq!(rohan.json(&["server", "status"])["pid"], before, "its core never restarted");
+    s.json(&["machine", "rm", "rohan"]);
 }
 
 #[test]

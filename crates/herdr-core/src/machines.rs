@@ -492,6 +492,7 @@ pub fn install(paths: &crate::paths::Paths, to: Reach, session: Option<&str>) ->
         current
     } else {
         let version = env!("CARGO_PKG_VERSION");
+        crate::releases::no_release_for_this_build(&format!("installing hc {version} on {target}"))?;
         let not_released = |_| {
             RpcError::new(
                 "install_failed",
@@ -561,8 +562,9 @@ fn install_payload(bin: &Path, scratch: &Path) -> Result<(Vec<u8>, bool), RpcErr
 /// home folder, and the installer runs from them (no download there). It
 /// swaps an hc already there the planned way, so its terminals keep running.
 fn install_windows(paths: &crate::paths::Paths, target: &str, session: Option<&str>) -> Result<String, RpcError> {
-    let scratch = crate::releases::Scratch::new()?;
     let version = env!("CARGO_PKG_VERSION");
+    crate::releases::no_release_for_this_build(&format!("installing hc {version} on {target}"))?;
+    let scratch = crate::releases::Scratch::new()?;
     let m = crate::releases::manifest(Some(version), &scratch.0).map_err(|_| {
         RpcError::new(
             "install_failed",

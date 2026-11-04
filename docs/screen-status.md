@@ -11,9 +11,8 @@ its own status; the screen is only a fallback.
 > **Ships:** the bundled rule manifests, the pure evaluation engine
 > (`detect::detect`), the foreground-agent identifier (`detect::identify`),
 > the override catalog, the inferred/native arbitration (`status::apply_inferred`,
-> `Status.source`) and the detection worker (`watch_screen_status`). Runtime
-> recovery for inferred state (adoption, handover, kept replacement) is phase
-> 2b and not wired yet.
+> `Status.source`), the detection worker (`watch_screen_status`) and runtime
+> recovery for inferred state (adoption, handover, kept replacement).
 
 ## Three separate facts
 
@@ -117,6 +116,65 @@ Manifests are bounded: ≤128 rules, gate depth ≤8, ≤512 gates and ≤1024
 matchers total, ≤512 chars per pattern, ≤256 KiB per file, regexes compiled
 once and shared. A manifest that exceeds the bounds fails validation and is
 ignored.
+
+## Recovery
+
+A core restart (`hc server restart`, `hc update`, crash recovery, kept-terminal
+relink) rebuilds every screen from the retained tail. Inference survives it:
+
+- **Native authority is permanent.** `reported` is persisted in
+  `terminals.json` the moment a program's first 7501 arrives — including a
+  child-only or `clear` report — so a restart never re-arms inference on a
+  program that already reported, even when 7501 has scrolled out of the tail.
+  A kept terminal that gets a replacement program clears `reported` and
+  re-arms inference for the new program.
+- **A restored inferred root is unconfirmed.** A `source:"screen"` root that
+  survives adoption stays visible (waits still see it) but must be re-proven:
+  a fresh accepted verdict — `working`, `blocked`, or `idle` after its normal
+  settle — from a post-restart snapshot clears the mark. Re-confirming the
+  same state and kind is a no-op: no event, no turn. `unknown` evidence and
+  skipped snapshots neither confirm nor extend the deadline.
+- **Unconfirmed roots expire.** Adoption + 30 s without an accepted positive
+  verdict withdraws the root quietly — this is the documented turn exception:
+  the recovery withdrawal stamps the terminal, publishes a null status and
+  persists, but counts **no turn** and produces no completion news (a
+  wherdr-style "unread turn" derivation stays false). A *confirmed* inferred
+  root withdrawn later — e.g. the foreground agent exits — does count a turn
+  exactly like a native status clearing does. Detection disabled, an empty
+  catalog, or an agent dropped from the catalog withdraws the same quiet way.
+- **In-flight verdicts die at the boundary.** Adoption, relink, finish,
+  removal, restart requests, shutdown and handover bump a per-terminal
+  invalidation generation and the output sequence under the state lock, so a
+  verdict read before the boundary can never commit after it. Stop, restart,
+  handover and shutdown also freeze detection entirely: nothing is collected,
+  committed, settled, confirmed or withdrawn while frozen; native reports and
+  finish accounting still apply.
+
+## Fork version and updates
+
+This build is `0.1.17-followcat.1` — `0.1.17` plus a fork suffix. The suffix
+works everywhere the version appears (`hc --version`, `server.status`,
+`hello`) and in `hc update --from <binary>`.
+
+- `older()` compares only the three numeric components, so `0.1.17`,
+  `0.1.17-followcat.1` and `0.1.17-followcat.2` all compare **equal** — a
+  later fork build swaps in without `--force`, and a suffix-only "downgrade"
+  is not caught either.
+- `hc update --version` still takes only `X.Y.Z` and rejects the suffix.
+- **A fork never updates to an official release by itself.** Plain
+  `hc update` and `hc update --version` refuse with a clear message; the
+  escape — and the only update path — is `hc update --from <binary>`, which
+  keeps terminals, `reported` and turn counts. The same refusal guards every
+  release download a `hc machine add --install` could make: same-platform
+  targets get this binary copied byte-for-byte (which works fine), while a
+  Windows or other-OS target refuses instead of fetching an official release.
+- `hc machine add --install` installs only after a missing or incompatible
+  answer; a box that already runs a compatible core is left untouched (no
+  copy, no restart). Replacing a remote core is `hc machine update`.
+
+Install it by copying the packaged `herdr-core` to `~/.local/bin/` (with an
+`hc` link beside it) and running `hc update --from <binary>` or
+`hc server restart`; do not run `hc update` — it has no release to fetch.
 
 ## Limitations
 

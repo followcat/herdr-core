@@ -33,6 +33,25 @@ fn unavailable(why: String) -> RpcError {
     RpcError::new("unavailable", why, "check your connection; the releases are at releases.herdr.dev")
 }
 
+/// A release version is exactly `X.Y.Z`: this build is a released one, so a
+/// release-download path may run. A fork suffix (`0.1.17-followcat.1`) names
+/// no published release; downloading the official one would silently replace
+/// the fork. Every release-download path refuses first: `what` names the
+/// attempted action for the message.
+pub fn no_release_for_this_build(what: &str) -> Result<(), RpcError> {
+    let version = env!("CARGO_PKG_VERSION");
+    let parts: Vec<&str> = version.split('.').collect();
+    let number = |p: &&str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+    if parts.len() == 3 && parts.iter().all(number) {
+        return Ok(());
+    }
+    Err(RpcError::new(
+        "refused",
+        format!("{what}: hc {version} is a fork build, and only official releases are published"),
+        "install or update this fork with `hc update --from <binary>`",
+    ))
+}
+
 fn curl(url: &str, to: &Path) -> Result<(), RpcError> {
     // Quiet: our error says what failed, and piped stderr is one JSON error.
     let ok = Command::new("curl")

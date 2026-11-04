@@ -11,6 +11,17 @@ use std::os::unix::net::UnixListener;
 fn an_up_to_date_binary_restarts_only_an_older_running_core() {
     let mut s = Session::new();
     let version = env!("CARGO_PKG_VERSION");
+    if !released_build() {
+        // A fork build never downloads an official release: every release
+        // update path refuses and points at `hc update --from <binary>`.
+        for args in [&["update"][..], &["update", "--version", "0.1.16"], &["update", "--version", "999.0.0"]] {
+            let (_, e) = s.err(&[&["--json"], args].concat());
+            assert_eq!(e["error"]["kind"], "refused", "{args:?}: {e}");
+            assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{args:?}: {e}");
+        }
+        assert!(!s.connect_ok(), "checking an absent core must not start one");
+        return;
+    }
     std::fs::create_dir_all(s.root.join("core")).unwrap();
     std::fs::write(
         s.root.join("core/latest.json"),
@@ -96,6 +107,12 @@ fn update_from_a_file_swaps_hc_and_keeps_everything_running() {
     s.bin = dir.join("hc"); // run as `hc`, the way people do
     let t = run(&s, &["sh", "-c", "echo before; while read l; do echo got-$l; done"]);
     let pid = s.json(&["server", "status"])["pid"].clone();
+    // A terminal that reported 7501: its status, native authority and turn
+    // count must survive the swap, along with the terminal itself.
+    let watched = run(&s, &["sh", "-c", &script(&s, "r state=working; w go; r state=done; w hold")]);
+    wait_until("working", || get(&s, &watched)["status"]["state"] == "working");
+    touch(&s, "go");
+    wait_until("done", || get(&s, &watched)["status"]["state"] == "done");
 
     let r = s.json(&["update", "--from", BIN]);
     let real = std::fs::canonicalize(dir.join("herdr-core")).unwrap(); // macOS: /var is /private/var
@@ -106,6 +123,14 @@ fn update_from_a_file_swaps_hc_and_keeps_everything_running() {
     assert!(dir.join("hc").is_symlink(), "the link stays a link");
     s.json(&["send", &t, "after"]);
     wait_until("the terminal still answers", || text(&s, &t).contains("got-after"));
+    let kept = get(&s, &watched);
+    assert_eq!(
+        (kept["status"]["state"].as_str(), kept["reported"].as_bool(), kept["turn"].as_u64()),
+        (Some("done"), Some(true), Some(1)),
+        "a native report keeps its state, authority and turn across the update: {kept}"
+    );
+    touch(&s, "hold");
+    wait_until("its program kept running too", || get(&s, &watched)["state"] == "finished");
 
     let older = s.root.join("older");
     std::fs::write(&older, "#!/bin/sh\necho 'hc 0.0.1'\n").unwrap();

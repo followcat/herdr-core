@@ -249,6 +249,9 @@ fn bundle_completion_skips_releases_without_a_bundle() {
 #[cfg(target_os = "macos")]
 #[test]
 fn machine_installs_keep_the_complete_bundle_and_both_aliases() {
+    if !released_build() {
+        return; // a fork build refuses release downloads; tests/machines.rs covers that
+    }
     for cross_arch in [false, true] {
         use std::os::unix::fs::PermissionsExt;
         let mut remote = Session::new();
@@ -559,6 +562,9 @@ fn the_install_script_marks_only_plain_release_downloads() {
 
 #[test]
 fn hc_update_downloads_checks_and_swaps() {
+    if !released_build() {
+        return; // a fork build refuses release updates; tests/update.rs covers that
+    }
     let mut s = Session::new();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let dir = s.root.join("bin");
@@ -581,6 +587,9 @@ fn hc_update_downloads_checks_and_swaps() {
 
 #[test]
 fn hc_update_to_a_version_takes_at_least_that_one() {
+    if !released_build() {
+        return; // a fork build refuses release updates; tests/update.rs covers that
+    }
     let mut s = Session::new();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let dir = s.root.join("bin");
@@ -604,6 +613,9 @@ fn hc_update_to_a_version_takes_at_least_that_one() {
 
 #[test]
 fn hc_update_never_takes_a_release_of_another_generation() {
+    if !released_build() {
+        return; // a fork build refuses release updates; tests/update.rs covers that
+    }
     let mut s = Session::new();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let latest = r.root.join("core/latest.json");
@@ -637,6 +649,15 @@ fn a_machine_of_another_cpu_gets_the_released_build_for_it() {
     let r = Releases::new(&s, THIS, &[&target]);
     s.env.push(fake_ssh(&s, &[("odd", &odd)]));
     s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
+    if !released_build() {
+        // A cross-platform install requests this version's release; a fork
+        // build names no release, so it refuses and says to use --from.
+        let (_, e) = s.err(&["--json", "machine", "add", "odd", "--install"]);
+        assert_eq!(e["error"]["kind"], "refused", "{e}");
+        assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
+        assert!(!odd.root.join(".local/bin/herdr-core").exists(), "nothing was copied");
+        return;
+    }
     let t = run(&s, &["sh", "-c", &format!("{BIN} machine add odd; echo added-$?; sleep 100")]);
     wait_until("the offer", || text(&s, &t).contains("[Y/n]"));
     s.json(&["send", &t, "y"]);

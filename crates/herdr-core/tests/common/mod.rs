@@ -261,6 +261,13 @@ pub fn slow_runner() -> bool {
     std::env::var_os("HC_TEST_SLOW_RUNNER").is_some()
 }
 
+/// `X.Y.Z` names a published release; a fork suffix names none. Release
+/// download paths refuse on a fork build, so tests branch on this.
+pub fn released_build() -> bool {
+    let parts: Vec<&str> = env!("CARGO_PKG_VERSION").split('.').collect();
+    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// `hc run --bg <args>`: started, not waited on; returns the address.
 pub fn run(s: &Session, args: &[&str]) -> String {
     s.json(&[&["run", "--bg"], args].concat())["address"].as_str().unwrap().to_string()
