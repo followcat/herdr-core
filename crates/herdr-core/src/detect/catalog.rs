@@ -69,12 +69,12 @@ impl Catalog {
         Catalog { manifests, warnings }
     }
 
-    /// The manifest for `agent` (canonical id or declared alias).
+    /// The manifest for `agent` by canonical id. Aliases are metadata, not
+    /// lookup keys: `identify` already canonicalizes, and an override's
+    /// declared aliases must not shadow another agent's entry or dodge the
+    /// `[detect] agents` allowlist.
     pub fn get(&self, agent: &str) -> Option<Arc<Manifest>> {
-        self.manifests
-            .iter()
-            .find(|(id, m)| id == agent || m.aliases.iter().any(|a| a == agent))
-            .map(|(_, m)| m.clone())
+        self.manifests.iter().find(|(id, _)| id == agent).map(|(_, m)| m.clone())
     }
 
     pub fn agents(&self) -> impl Iterator<Item = &str> {

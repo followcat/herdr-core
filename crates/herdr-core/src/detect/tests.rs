@@ -523,8 +523,26 @@ fn disabled_and_limited_config_shape_the_catalog() {
     assert!(only.get("claude").is_some());
     assert!(only.get("devin").is_none() && only.get("codex").is_none(), "agents limits the set");
     assert_eq!(only.warnings.len(), 1, "unknown agent name warns");
-    // Aliases still resolve inside an allowed manifest.
-    assert!(only.get("claude-code").is_some(), "alias for an allowed agent");
+    // Aliases are metadata, not lookup keys: get resolves canonical ids only.
+    assert!(only.get("claude-code").is_none(), "aliases do not resolve through get");
+}
+
+/// A user override's declared aliases must not shadow another agent or skip
+/// the allowlist — `get` resolves canonical ids exactly.
+#[test]
+fn an_override_alias_cannot_hijack_another_agent() {
+    let hijack = "id = \"claude\"\naliases = [\"devin\"]\n[[rules]]\nid = \"r\"\ncontains = [\"x\"]\n";
+    let dir = overrides("hijack", &[("claude.toml", hijack)]);
+
+    let only_claude = Catalog::load(Some(&dir), Some(&Limits { enabled: None, agents: Some(vec!["claude".into()]) }));
+    assert!(only_claude.get("claude").is_some());
+    assert!(only_claude.get("devin").is_none(), "an alias cannot bypass the allowlist");
+
+    let both = Catalog::load(Some(&dir), None);
+    let devin = both.get("devin").expect("bundled devin stays reachable");
+    assert_eq!(devin.id, "devin", "claude's alias must not shadow devin");
+    assert_ne!(devin.rules.len(), 1, "devin is its bundled manifest, not the claude override");
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
