@@ -191,7 +191,7 @@ pub(super) async fn wait_children_everywhere(
 }
 
 /// Decided from the children's current facts, again on every change:
-/// `all`: none is working (unreported children and sent first tasks still pending count too);
+/// `all`: none is working (children with no status and sent first tasks still pending count too);
 /// the reply lists every child, finished ones too. `any`: a child with news
 /// (for the parent itself: news it hasn't seen, even from before the wait), or
 /// a message typed into the waiting parent (it sits in its queue until this
@@ -228,7 +228,9 @@ pub(super) async fn wait_children(
     let busy = |t: &Terminal| {
         t.is_live()
             && !t.program_lost()
-            && (!t.reported || t.first_task_turn.is_some() || t.status.as_ref().is_some_and(|s| s.state == "working"))
+            && (!t.status_available()
+                || t.first_task_turn.is_some()
+                || t.status.as_ref().is_some_and(|s| s.state == "working"))
     };
     // While the caller waits on them, it needs no notes about them.
     let (start, _watching): (std::collections::HashMap<u32, u64>, Vec<Watching>) = {

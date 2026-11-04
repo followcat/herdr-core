@@ -54,8 +54,9 @@ pub struct Terminal {
     /// version), fixed at start; XTVERSION answers with it.
     #[serde(default)]
     pub identity: String,
-    /// The program's own word for what it's doing (OSC 7501 root record);
-    /// null if it never said, or after it exited.
+    /// The program's own word for what it's doing (OSC 7501 root record, or
+    /// the screen-inferred one with `source = "screen"`); null if it never
+    /// said, or after it exited.
     #[serde(default)]
     pub status: Option<crate::status::Status>,
     /// When that word last changed, ms since the epoch; null if it never said.
@@ -153,6 +154,13 @@ impl Terminal {
 
     pub(crate) fn program_lost(&self) -> bool {
         self.is_live() && self.pid.is_none() && self.reason.as_deref().is_some_and(|r| r != "spawn_pending")
+    }
+
+    /// A status word exists to read: the program's own report, or the screen's
+    /// (fork inference, `source = "screen"`). Availability checks use this;
+    /// `reported` stays narrower — only the program's own 7501 sets it.
+    pub fn status_available(&self) -> bool {
+        self.reported || self.status.as_ref().is_some_and(|s| s.source.is_some())
     }
 
     pub fn check_program(&self) -> Result<(), RpcError> {

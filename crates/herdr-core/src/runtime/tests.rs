@@ -444,6 +444,160 @@ async fn waiting_for_holder_start_does_not_block_the_core_executor() {
     assert!(answered_while_starting, "holder startup blocked the core executor");
 }
 
+/// A live terminal on a fake holder, old enough that `send`'s settle passes.
+fn terminal_on_fake_holder(core: &Core) -> (u32, mpsc::Receiver<Vec<u8>>) {
+    let (writer, frames) = mpsc::channel();
+    let (bye, _) = mpsc::channel();
+    let mut st = core.lock();
+    let id = st.reg.create(crate::terminals::NewTerminal { argv: vec!["sh".into()], ..Default::default() }, 0).unwrap();
+    {
+        let t = st.reg.terminals.get_mut(&id).unwrap();
+        t.holder = Some("fake".into());
+        t.pid = Some(4321);
+        t.created_ms = 0;
+    }
+    st.screens.insert(id, Screen::new(80, 24, 1 << 20));
+    st.holders.push(Link { writer, pid: 0, instance: "fake".into(), current: true, bye, bye_rx: None });
+    (id, frames)
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_inferred_root_is_observed_and_waited_on_but_never_esc() {
+    let (core, root) = test_core();
+    let (id, frames) = terminal_on_fake_holder(&core);
+    core.inferred_status(&mut core.lock(), id, Some(("working", None)));
+    {
+        let st = core.lock();
+        let t = &st.reg.terminals[&id];
+        assert_eq!(t.status.as_ref().unwrap().state, "working");
+        assert_eq!(t.status.as_ref().unwrap().source.as_deref(), Some("screen"));
+        assert!(!t.reported, "inference never claims a report");
+    }
+    // send observes the inferred turn like a reported one.
+    let c = core.clone();
+    let sending = tokio::spawn(async move { c.send(id, "go on", false, None).await });
+    tokio::time::advance(Duration::from_millis(500)).await;
+    let sent = sending.await.unwrap().unwrap();
+    assert_eq!(sent.started, Some(true), "an inferred status is observed like a report");
+
+    // a wait follows the inferred word's changes.
+    let c = core.clone();
+    let waiting = tokio::spawn(async move {
+        c.wait(id, crate::wait::WaitSpec { output: None, timeout: Duration::from_secs(30), after_turn: None }, None)
+            .await
+    });
+    tokio::task::yield_now().await;
+    tokio::task::yield_now().await;
+    core.inferred_status(&mut core.lock(), id, Some(("idle", None)));
+    let result = waiting.await.unwrap();
+    assert_eq!(result.reason, "status");
+    assert_eq!(result.status.as_deref(), Some("idle"));
+    assert_eq!(result.turn, 1, "working → idle ended one turn");
+
+    // interrupt still picks by `reported`: unreported means ctrl+c, not esc.
+    let c = core.clone();
+    let interrupting = tokio::spawn(async move { c.interrupt(id, Duration::ZERO).await });
+    for _ in 0..3 {
+        for tx in core.lock().foreground.remove(&id).unwrap_or_default() {
+            let _ = tx.send(-1);
+        }
+        tokio::task::yield_now().await;
+    }
+    let (outcome, key) = interrupting.await.unwrap().unwrap();
+    assert_eq!(key, "ctrl+c", "an inferred status must not switch interrupt to esc");
+    assert!(matches!(outcome, crate::input::Interrupted::Unknown));
+    let typed = std::iter::from_fn(|| frames.try_recv().ok()).collect::<Vec<_>>();
+    assert!(typed.contains(&proto::frame(proto::INPUT, id, b"\x03")), "the holder got ctrl+c");
+
+    // A native report then owns the word: same observations, but esc now.
+    core.output(&mut core.lock(), id, b"\x1b]7501;state=working\x1b\\");
+    {
+        let st = core.lock();
+        let t = &st.reg.terminals[&id];
+        assert!(t.reported && t.status.as_ref().is_some_and(|s| s.source.is_none()));
+        assert_eq!(t.turn, 1, "the native root replaced the inferred one: entering working ends no turn");
+    }
+    core.inferred_status(&mut core.lock(), id, Some(("blocked", None)));
+    assert_eq!(core.lock().reg.terminals[&id].status.as_ref().unwrap().state, "working", "reported keeps the word");
+    let c = core.clone();
+    let interrupting = tokio::spawn(async move { c.interrupt(id, Duration::ZERO).await });
+    let (outcome, key) = interrupting.await.unwrap().unwrap();
+    assert_eq!(key, "esc");
+    assert!(matches!(outcome, crate::input::Interrupted::StillWorking));
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn without_status_a_program_stays_invisible_to_these_paths() {
+    let (core, root) = test_core();
+    let (id, _frames) = terminal_on_fake_holder(&core);
+    let c = core.clone();
+    let sent = tokio::spawn(async move { c.send_first_task(id, "first task").await });
+    tokio::time::advance(Duration::from_millis(500)).await;
+    let sent = sent.await.unwrap().unwrap();
+    assert_eq!(sent.started, None, "no status: nobody can tell whether it started");
+    assert!(core.lock().reg.terminals[&id].first_task_turn.is_some());
+
+    // And a wait treats it as working until it exits.
+    let c = core.clone();
+    let waiting = tokio::spawn(async move {
+        c.wait(id, crate::wait::WaitSpec { output: None, timeout: Duration::from_millis(200), after_turn: None }, None)
+            .await
+    });
+    tokio::time::advance(Duration::from_millis(300)).await;
+    assert_eq!(waiting.await.unwrap().reason, "timeout");
+
+    // First inferred evidence finishes the sent first task like a report would.
+    core.inferred_status(&mut core.lock(), id, Some(("blocked", Some("permission"))));
+    {
+        let st = core.lock();
+        let t = &st.reg.terminals[&id];
+        assert!(t.first_task_turn.is_none(), "an inferred blocker finishes the first task");
+        assert_eq!(t.news, 1);
+    }
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn leaving_an_inferred_blocked_releases_the_persons_draft() {
+    let (core, root) = test_core();
+    let (id, _frames) = terminal_on_fake_holder(&core);
+    core.inferred_status(&mut core.lock(), id, Some(("blocked", Some("permission"))));
+    core.lock().gates.entry(id).or_default().viewer(b"draft text", true);
+    let c = core.clone();
+    let typing = tokio::spawn(async move { c.type_in(id, Duration::ZERO, true, |_, _| Ok(((), vec![]))).await });
+    tokio::task::yield_now().await;
+    tokio::task::yield_now().await;
+    assert!(core.lock().gates[&id].waiting_for_person, "the draft holds agent input");
+    core.inferred_status(&mut core.lock(), id, Some(("idle", None)));
+    tokio::time::advance(Duration::from_millis(50)).await;
+    typing.await.unwrap().unwrap();
+    drop(core);
+    remove_root(&root);
+}
+
+#[test]
+fn a_viewers_paint_replays_native_status_never_inferred() {
+    let (core, root) = test_core();
+    let (id, _frames) = terminal_on_fake_holder(&core);
+    core.inferred_status(&mut core.lock(), id, Some(("working", None)));
+    {
+        let st = core.lock();
+        let paint = crate::viewers::first_paint(&st, id, 0);
+        assert!(!paint.windows(4).any(|w| w == b"7501"), "inference is never replayed as OSC");
+    }
+    core.output(&mut core.lock(), id, b"\x1b]7501;state=done:id=sub\x1b\\");
+    {
+        let st = core.lock();
+        let paint = crate::viewers::first_paint(&st, id, 0);
+        assert!(paint.windows(4).any(|w| w == b"7501"), "native records still reach a new viewer");
+    }
+    drop(core);
+    remove_root(&root);
+}
+
 /// Holder threads can keep the core, and so its registry writer, alive a
 /// moment after the test drops it: a last snapshot may still land.
 fn remove_root(root: impl AsRef<std::path::Path>) {

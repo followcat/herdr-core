@@ -54,7 +54,7 @@ fn last_lines(text: &str) -> Vec<String> {
 /// A parent can take a note: a live agent not on a dialog (typing could answer
 /// it). A working agent takes typed text as a message, like any steer.
 fn can_take_note(t: &Terminal) -> bool {
-    t.is_live() && t.reported && !blocked(t)
+    t.is_live() && t.status_available() && !blocked(t)
 }
 
 /// `t7 reviewer`: address, then name or template.
@@ -101,7 +101,7 @@ impl Core {
         let t = &st.reg.terminals[&id];
         // Any end the parent hasn't seen is news, a success too: a background
         // build that worked is what it waits to hear. A plain program's shows its last lines.
-        let last = match !t.is_live() && !t.reported {
+        let last = match !t.is_live() && !t.status_available() {
             true => last_lines(&self.screen_text(st, id).unwrap_or_default()),
             false => Vec::new(),
         };
@@ -149,11 +149,11 @@ impl Core {
         let target = st.reg.terminals.get(&to);
         // A child on another machine calling back (`rohan/t7`).
         if let Some(afar) = from.filter(|f| f.contains('/'))
-            && target.is_some_and(|t| t.reported)
+            && target.is_some_and(|t| t.status_available())
         {
             return format!("<hc from=\"{afar}\">{text}</hc>");
         }
-        match sender.filter(|s| s.reported && target.is_some_and(|t| t.reported)) {
+        match sender.filter(|s| s.status_available() && target.is_some_and(|t| t.status_available())) {
             Some(s) if reach => {
                 format!("<hc from=\"{}\" reach=\"hc send {} when done or stuck\">{text}</hc>", who(s), s.address)
             }
@@ -326,6 +326,7 @@ mod tests {
             app: String::new(),
             title: String::new(),
             msg: String::new(),
+            source: None,
         });
         t.status.as_mut().unwrap().state = "blocked".into();
         t.status.as_mut().unwrap().kind = Some("permission".into());
@@ -350,5 +351,17 @@ mod tests {
             note(&r.terminals[&id], "t1", &last),
             "<hc>t1 reviewer exited (exit 3). Last lines:\na\nb[201~\tc\nRead: hc read t1</hc>"
         );
+    }
+
+    #[test]
+    fn an_inferred_status_counts_as_status_for_note_delivery() {
+        let mut r = Registry::default();
+        let id = r.create(NewTerminal { argv: vec!["x".into()], ..Default::default() }, 0).unwrap();
+        let t = r.terminals.get_mut(&id).unwrap();
+        assert!(!can_take_note(t), "a silent program takes no notes");
+        crate::status::apply_inferred(t, "working", None);
+        assert!(can_take_note(t), "inferred working is available like a report");
+        crate::status::apply_inferred(t, "blocked", Some("permission"));
+        assert!(!can_take_note(t), "inferred blocked is a dialog either way");
     }
 }

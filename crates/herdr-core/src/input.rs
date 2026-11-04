@@ -284,9 +284,10 @@ pub fn paste(bracketed: bool, text: &str) -> Vec<u8> {
 }
 
 pub struct Sent {
+    /// The status word when the text went in (null: none, not even inferred).
     pub status: Option<String>,
     pub turn: u64,
-    /// Whether it went `working` soon after; None when it never reports status.
+    /// Whether it went `working` soon after; None when it has no status to watch.
     pub started: Option<bool>,
     pub waited_for_person: bool,
 }
@@ -409,7 +410,7 @@ impl Core {
             t.check_program()?;
         }
         self.settle(id).await?;
-        let ((status, turn, reported), waited_for_person) = self
+        let ((status, turn, status_available), waited_for_person) = self
             .type_in(id, quiet(), true, |st, t| {
                 let word = state_word(t);
                 if word.as_deref() == Some("blocked") && !force {
@@ -449,10 +450,10 @@ impl Core {
                 let bytes = paste(screen.dec_mode(2004), text);
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
                 let steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
-                Ok(((word, t.turn, t.reported), steps))
+                Ok(((word, t.turn, t.status_available()), steps))
             })
             .await?;
-        let started = if reported {
+        let started = if status_available {
             let went =
                 |st: &State| st.reg.terminals.get(&id).is_none_or(|t| t.turn > turn || working(t) || !t.is_live());
             self.wait_for(started_window(), went).await;

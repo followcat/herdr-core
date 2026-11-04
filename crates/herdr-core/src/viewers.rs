@@ -212,6 +212,35 @@ impl Core {
         if word_changed { self.save(st) } else { self.save_soon() }
     }
 
+    /// The screen's verdict for a silent program (fork): the same
+    /// `status_changed` accounting, draft release and persistence as a native
+    /// report — minus `reported`, which only the program's own 7501 may set.
+    /// `None` withdraws the inferred root (evidence gone, foreground left).
+    /// The screen worker is its caller; tests drive it directly.
+    #[cfg(test)]
+    pub(crate) fn inferred_status(&self, st: &mut State, id: u32, verdict: Option<(&str, Option<&str>)>) {
+        let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
+        let was = word(st);
+        let change = match verdict {
+            Some((state, kind)) => {
+                crate::status::apply_inferred(st.reg.terminals.get_mut(&id).expect("live terminal"), state, kind)
+            }
+            None => crate::status::withdraw_inferred(st.reg.terminals.get_mut(&id).expect("live terminal")),
+        };
+        if change == crate::status::Change::default() {
+            return;
+        }
+        let now = word(st);
+        if now != was
+            && was.as_deref() == Some("blocked")
+            && let Some(gate) = st.gates.get_mut(&id)
+        {
+            gate.clear_draft();
+        }
+        self.status_changed(st, id, change);
+        if now != was { self.save(st) } else { self.save_soon() }
+    }
+
     pub fn status_changed(&self, st: &mut State, id: u32, change: crate::status::Change) {
         let t = st.reg.terminals.get_mut(&id).expect("reported terminal");
         let first_task_finished = t.first_task_turn.is_some_and(|turn| {
@@ -423,6 +452,10 @@ fn paint_state(st: &State, id: u32, screen: Vec<u8>) -> Vec<u8> {
     paint.extend(if t.win32_input { b"\x1b[?9001h" } else { b"\x1b[?9001l" });
     let root = t.status.iter().map(|s| ("", s));
     for (rid, status) in root.chain(t.records.iter().map(|(k, s)| (k.as_str(), s))) {
+        if status.source.is_some() {
+            // Inference is a JSON fact: never replayed to viewers as 7501.
+            continue;
+        }
         paint.extend(status.encode(rid).as_bytes());
     }
     paint

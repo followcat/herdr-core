@@ -31,7 +31,7 @@ pub struct WaitResult {
     /// wait); for each child in `children`: status, exit, or running (still
     /// working).
     pub reason: String,
-    /// The exact word the program reported (current word on timeout or output).
+    /// The word the wait ended on (current word on timeout or output).
     pub status: Option<String>,
     pub turn: u64,
     pub exit_code: Option<i32>,
@@ -128,13 +128,16 @@ impl Core {
         if spec.after_turn.is_some_and(|k| start.turn > k) {
             return result(true, "status", None);
         }
-        // Already not working: that is the answer. A program that never reported
+        // Already not working: that is the answer. A program with no status
         // is working until it exits. Not after a send whose turn hasn't started:
         // idle then is the old turn's word.
         let now = start.status.as_ref().map(|s| s.state.as_str());
         let pending = spec.after_turn.is_some() && !stuck(now);
-        let already =
-            if spec.output.is_some() { stuck(now) } else { start.reported && !pending && ends(Some("working"), now) };
+        let already = if spec.output.is_some() {
+            stuck(now)
+        } else {
+            start.status_available() && !pending && ends(Some("working"), now)
+        };
         if already {
             return result(true, "status", None);
         }

@@ -837,7 +837,7 @@
               }
             ],
             "default": null,
-            "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
+            "description": "The program's own word for what it's doing (OSC 7501 root record, or\nthe screen-inferred one with `source = \"screen\"`); null if it never\nsaid, or after it exited."
           },
           "status_ms": {
             "default": null,
@@ -914,14 +914,14 @@
       "SendResult": {
         "properties": {
           "started": {
-            "description": "Whether it went `working` within a few seconds; null when it doesn't\nreport status, so nobody can tell.",
+            "description": "Whether it went `working` within a few seconds; null when it has no\nstatus to watch, so nobody can tell.",
             "type": [
               "boolean",
               "null"
             ]
           },
           "status": {
-            "description": "The program's status word when the text went in (null: it never said).",
+            "description": "The status word when the text went in (null: none, not even inferred).",
             "type": [
               "string",
               "null"
@@ -978,6 +978,13 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "`screen` when the record was inferred from the screen (fork); absent\non the program's own reports. Additive generation-1 field.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -1314,7 +1321,7 @@
               }
             ],
             "default": null,
-            "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
+            "description": "The program's own word for what it's doing (OSC 7501 root record, or\nthe screen-inferred one with `source = \"screen\"`); null if it never\nsaid, or after it exited."
           },
           "status_ms": {
             "default": null,
@@ -1416,7 +1423,7 @@
             ]
           },
           "status": {
-            "description": "The exact word the program reported (current word on timeout or output).",
+            "description": "The word the wait ended on (current word on timeout or output).",
             "type": [
               "string",
               "null"
@@ -2601,7 +2608,7 @@
           }
         },
         {
-          "description": "Wait on children instead: all = until none is working, any = next news or a message to you.\n\n`all`: until none of the children is working (one that hasn't reported\nyet counts as working). `any`: the parent's unseen news (a turn ended, it\nblocked, it hit an error, it exited), else the next child to stop working; for the parent\nitself, also a message typed into it while it worked (reason `message`).\nA child with a sent launch task counts as working until its turn advances\npast delivery, or it reports done, blocked, error, or exits. Startup idle\ndoes not complete that task in either mode. Without a launch task, idle\nstill counts as stopped.",
+          "description": "Wait on children instead: all = until none is working, any = next news or a message to you.\n\n`all`: until none of the children is working (one with no status yet\ncounts as working). `any`: the parent's unseen news (a turn ended, it\nblocked, it hit an error, it exited), else the next child to stop working; for the parent\nitself, also a message typed into it while it worked (reason `message`).\nA child with a sent launch task counts as working until its turn advances\npast delivery, or it reports done, blocked, error, or exits. Startup idle\ndoes not complete that task in either mode. Without a launch task, idle\nstill counts as stopped.",
           "name": "children",
           "required": false,
           "schema": {
@@ -2613,7 +2620,7 @@
                 "type": "null"
               }
             ],
-            "description": "Wait on children instead: all = until none is working, any = next news or a message to you.\n\n`all`: until none of the children is working (one that hasn't reported\nyet counts as working). `any`: the parent's unseen news (a turn ended, it\nblocked, it hit an error, it exited), else the next child to stop working; for the parent\nitself, also a message typed into it while it worked (reason `message`).\nA child with a sent launch task counts as working until its turn advances\npast delivery, or it reports done, blocked, error, or exits. Startup idle\ndoes not complete that task in either mode. Without a launch task, idle\nstill counts as stopped."
+            "description": "Wait on children instead: all = until none is working, any = next news or a message to you.\n\n`all`: until none of the children is working (one with no status yet\ncounts as working). `any`: the parent's unseen news (a turn ended, it\nblocked, it hit an error, it exited), else the next child to stop working; for the parent\nitself, also a message typed into it while it worked (reason `message`).\nA child with a sent launch task counts as working until its turn advances\npast delivery, or it reports done, blocked, error, or exits. Startup idle\ndoes not complete that task in either mode. Without a launch task, idle\nstill counts as stopped."
           }
         },
         {

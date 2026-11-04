@@ -485,12 +485,12 @@ pub struct SendParams {
 
 #[derive(Serialize, JsonSchema)]
 pub struct SendResult {
-    /// The program's status word when the text went in (null: it never said).
+    /// The status word when the text went in (null: none, not even inferred).
     pub status: Option<String>,
     /// The turn when the text went in.
     pub turn: u64,
-    /// Whether it went `working` within a few seconds; null when it doesn't
-    /// report status, so nobody can tell.
+    /// Whether it went `working` within a few seconds; null when it has no
+    /// status to watch, so nobody can tell.
     pub started: Option<bool>,
     /// True when delivery was held for a person's unsent draft.
     pub waited_for_person: bool,
@@ -505,8 +505,8 @@ pub struct WaitParams {
     pub terminal: Option<String>,
     /// Wait on children instead: all = until none is working, any = next news or a message to you.
     ///
-    /// `all`: until none of the children is working (one that hasn't reported
-    /// yet counts as working). `any`: the parent's unseen news (a turn ended, it
+    /// `all`: until none of the children is working (one with no status yet
+    /// counts as working). `any`: the parent's unseen news (a turn ended, it
     /// blocked, it hit an error, it exited), else the next child to stop working; for the parent
     /// itself, also a message typed into it while it worked (reason `message`).
     /// A child with a sent launch task counts as working until its turn advances

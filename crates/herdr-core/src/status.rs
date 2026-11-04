@@ -26,6 +26,10 @@ pub struct Status {
     pub title: String,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub msg: String,
+    /// `screen` when the record was inferred from the screen (fork); absent
+    /// on the program's own reports. Additive generation-1 field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 impl Status {
@@ -37,6 +41,7 @@ impl Status {
             app: r.app.clone(),
             title: r.title.clone(),
             msg: r.message.clone(),
+            source: None,
         }
     }
 
@@ -117,6 +122,11 @@ pub fn apply(t: &mut Terminal, r: &StatusReport) -> Change {
         }
         t.records.insert(r.id.clone(), Status::from(r));
     }
+    // Any report still ends inference: a native child withdraws the inferred
+    // root and keeps the native children; a root report replaces it in place.
+    if !r.id.is_empty() && t.status.as_ref().is_some_and(|s| s.source.is_some()) {
+        t.status = None;
+    }
     stamp(t, was_word);
     Change {
         status: true,
@@ -124,6 +134,51 @@ pub fn apply(t: &mut Terminal, r: &StatusReport) -> Change {
         turn_ended: end_turn(t, was_working),
         stuck: stuck(t).is_some() && stuck(t) != was.as_deref(),
     }
+}
+
+/// The screen's verdict for a program that never reported itself (fork).
+/// The same root-transition accounting as `apply` — the word, the turn, the
+/// stuck edge, `status_ms` — minus `reported`: inference never claims the
+/// program spoke 7501. A no-op when it said this already, or once a real
+/// report made `reported` true for this program's lifetime.
+pub fn apply_inferred(t: &mut Terminal, state: &str, kind: Option<&str>) -> Change {
+    if t.reported {
+        return Change::default();
+    }
+    let same = t.status.as_ref().is_some_and(|s| s.source.is_some() && s.state == state && s.kind.as_deref() == kind);
+    if same {
+        return Change::default();
+    }
+    let (was_working, was_word) = (working(t), word(t));
+    let was = stuck(t).map(String::from);
+    t.status = Some(Status {
+        state: state.into(),
+        kind: kind.map(Into::into),
+        progress: None,
+        app: String::new(),
+        title: String::new(),
+        msg: String::new(),
+        source: Some("screen".into()),
+    });
+    stamp(t, was_word);
+    Change {
+        status: true,
+        root_report: true,
+        turn_ended: end_turn(t, was_working),
+        stuck: stuck(t).is_some() && stuck(t) != was.as_deref(),
+    }
+}
+
+/// Drop the inferred root: the evidence is gone, the foreground left, or a
+/// native report claimed the terminal. Native children are untouched.
+pub fn withdraw_inferred(t: &mut Terminal) -> Change {
+    if t.status.as_ref().is_none_or(|s| s.source.is_none()) {
+        return Change::default();
+    }
+    let (was_working, was_word) = (working(t), word(t));
+    t.status = None;
+    stamp(t, was_word);
+    Change { status: true, root_report: true, turn_ended: end_turn(t, was_working), ..Default::default() }
 }
 
 /// The program ended: its status facts reset.
@@ -189,6 +244,73 @@ mod tests {
         assert!(reset(&mut t).turn_ended); // exited
         assert_eq!(t.turn, 5);
         assert!(t.status.is_none() && t.reported);
+    }
+
+    #[test]
+    fn an_inferred_root_counts_turns_like_a_native_one() {
+        let mut t = terminal();
+        let change = apply_inferred(&mut t, "working", None);
+        assert!(change.status);
+        assert_eq!(t.status.as_ref().unwrap().source.as_deref(), Some("screen"));
+        assert!(!t.reported, "inference never claims the program spoke");
+        assert!(apply_inferred(&mut t, "blocked", Some("permission")).turn_ended);
+        assert_eq!(
+            apply_inferred(&mut t, "blocked", Some("permission")),
+            Change::default(),
+            "same verdict: nothing new"
+        );
+        assert!(apply_inferred(&mut t, "blocked", Some("question")).status, "a new kind is new evidence");
+        apply_inferred(&mut t, "working", None);
+        assert!(apply_inferred(&mut t, "idle", None).turn_ended);
+        assert_eq!(t.turn, 2, "working → blocked → working → idle: two turns, as native counts");
+        assert_eq!(serde_json::to_value(t.status.as_ref().unwrap()).unwrap()["source"], "screen");
+        apply(&mut t, &report("done", ""));
+        assert!(
+            serde_json::to_value(t.status.as_ref().unwrap()).unwrap().get("source").is_none(),
+            "native records carry no source"
+        );
+    }
+
+    #[test]
+    fn native_reports_keep_full_authority_over_inferred_state() {
+        let mut t = terminal();
+        apply_inferred(&mut t, "working", None);
+        assert!(!apply(&mut t, &report("working", "")).turn_ended, "the root is replaced in place: no phantom turn");
+        assert!(t.status.as_ref().is_some_and(|s| s.source.is_none()) && t.reported);
+        assert_eq!(
+            apply_inferred(&mut t, "blocked", None),
+            Change::default(),
+            "once reported, inference never applies again for this program"
+        );
+    }
+
+    #[test]
+    fn native_children_and_clear_take_the_inferred_root_not_the_records() {
+        let mut t = terminal();
+        apply_inferred(&mut t, "working", None);
+        assert!(apply(&mut t, &report("working", "sub")).turn_ended);
+        assert!(t.status.is_none() && t.records["sub"].state == "working", "a child report withdraws only the root");
+        // A genuine native child can be named "screen" — it is a record, not provenance.
+        apply(&mut t, &report("blocked", "screen"));
+        assert_eq!(t.records["screen"].state, "blocked");
+
+        let mut t = terminal();
+        apply_inferred(&mut t, "working", None);
+        assert!(apply(&mut t, &report("clear", "")).turn_ended, "native clear wins too");
+        assert!(t.status.is_none() && t.records.is_empty() && t.reported);
+        assert_eq!(apply_inferred(&mut t, "working", None), Change::default(), "inference stays off after it");
+    }
+
+    #[test]
+    fn withdrawing_inference_keeps_native_facts_and_counts_the_turn() {
+        let mut t = terminal();
+        apply_inferred(&mut t, "working", None);
+        let change = withdraw_inferred(&mut t);
+        assert!(change.status && change.turn_ended && t.status.is_none() && !t.reported);
+        assert_eq!(withdraw_inferred(&mut t), Change::default(), "nothing inferred to withdraw");
+        apply(&mut t, &report("working", ""));
+        assert_eq!(withdraw_inferred(&mut t), Change::default(), "a native root is not withdrawn");
+        assert_eq!(t.status.as_ref().unwrap().state, "working");
     }
 
     #[test]

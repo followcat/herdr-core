@@ -153,9 +153,11 @@ impl Core {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         } else {
-            let reported = |st: &State| st.reg.terminals.get(&id).is_none_or(|t| t.reported || !t.is_live());
-            let reported_now = |st: &State| st.reg.terminals.get(&id).is_some_and(|t| t.reported);
-            if !self.wait_for(ready_timeout(), reported).await || !reported_now(&self.lock()) {
+            // "Ready" is a status to read, native or inferred; a silent agent
+            // gets one from screen detection, so the wait has the same end.
+            let status = |st: &State| st.reg.terminals.get(&id).is_none_or(|t| t.status_available() || !t.is_live());
+            let status_now = |st: &State| st.reg.terminals.get(&id).is_some_and(|t| t.status_available());
+            if !self.wait_for(ready_timeout(), status).await || !status_now(&self.lock()) {
                 if !live(&self.lock()) {
                     return not_sent("it exited before it was ready".into());
                 }
