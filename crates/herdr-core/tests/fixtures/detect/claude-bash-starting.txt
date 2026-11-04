@@ -1,0 +1,13 @@
+⏺ Tous les tests passent.
+
+✻ Brewed for 12s · done 10:02 am
+
+! sleep 12; echo fini
+  ⎿  Running… (7s)
+     (ctrl+b to run in background)
+
+────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────
+
+  ⏸ manual mode on · ← for agents

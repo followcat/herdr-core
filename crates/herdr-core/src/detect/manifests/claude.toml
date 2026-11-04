@@ -66,6 +66,18 @@ not = [
 ]
 
 [[rules]]
+id = "foreground_shell_working"
+state = "working"
+priority = 968
+region = "above_prompt_box"
+visible_working = true
+# A `!` shell running under the composer keeps a live "run in background"
+# hint and an elapsed timer above the prompt box. Both vanish when the
+# command finishes; the finished transcript only retains `… +N lines`.
+contains = ["ctrl+b to run in background"]
+line_regex = ['\(\d+[smh](?:\s|·|\))']
+
+[[rules]]
 id = "btw_overlay_working"
 state = "working"
 priority = 975
