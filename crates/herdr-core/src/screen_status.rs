@@ -71,20 +71,11 @@ pub(crate) struct Snap {
     title: String,
 }
 
-fn env_ms(var: &str, default: u64) -> Duration {
-    Duration::from_millis(std::env::var(var).ok().and_then(|v| v.parse().ok()).unwrap_or(default))
-}
-
-/// The worker's tick; `HC_DETECT_MS` overrides.
-fn cadence() -> Duration {
-    env_ms("HC_DETECT_MS", 500)
-}
-
+/// The worker's tick.
+const CADENCE: Duration = Duration::from_millis(500);
 /// How long idle evidence must hold before it publishes; working and blocked
-/// publish at once. `HC_DETECT_SETTLE_MS` overrides.
-fn settle() -> Duration {
-    env_ms("HC_DETECT_SETTLE_MS", 1500)
-}
+/// publish at once.
+const SETTLE: Duration = Duration::from_millis(1500);
 
 /// Terminals snapshotted per pass; the rest wait a tick.
 const MAX_PER_PASS: usize = 32;
@@ -102,7 +93,7 @@ impl Core {
             return;
         }
         loop {
-            tokio::time::sleep(cadence()).await;
+            tokio::time::sleep(CADENCE).await;
             self.screen_status_pass(&catalog).await;
         }
     }
@@ -203,7 +194,7 @@ impl Core {
             // confirms without another extraction.
             let due = {
                 let watch = st.screen_status.entry(id).or_default();
-                let due = watch.idle_since.is_some_and(|since| since.elapsed() >= settle());
+                let due = watch.idle_since.is_some_and(|since| since.elapsed() >= SETTLE);
                 if due {
                     watch.idle_since = None;
                 }
@@ -269,7 +260,7 @@ impl Core {
                         None
                     } else {
                         let since = *watch.idle_since.get_or_insert(Instant::now());
-                        if since.elapsed() >= settle() {
+                        if since.elapsed() >= SETTLE {
                             watch.idle_since = None;
                             Some(("idle", None))
                         } else {

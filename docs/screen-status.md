@@ -127,11 +127,11 @@ ignored.
   silent agent in the same shell is not detected. Fixing that needs an
   explicit agent-session concept (phase 2+).
 - **Sampling.** `watch_screen_status` reads eligible screens about every
-  500 ms (`HC_DETECT_MS`); transitions shorter than that may be missed or
-  published late. Working and blocked publish at once; inferred `idle`
-  waits for a 1.5 s settle deadline (`HC_DETECT_SETTLE_MS`) so a redraw
-  between tool calls does not flap — an unchanged screen confirms it
-  without re-evaluating, and `unknown` never times out into `idle`.
+  500 ms; transitions shorter than that may be missed or published late.
+  Working and blocked publish at once; inferred `idle` waits for a 1.5 s
+  settle deadline so a redraw between tool calls does not flap — an
+  unchanged screen confirms it without re-evaluating, and `unknown` never
+  times out into `idle`.
   Evaluation happens off the runtime lock; a verdict commits only if the
   screen, program, foreground and manifest it was read from are unchanged.
   Resize, stitch completion, a foreground/agent change or a native report
