@@ -250,3 +250,33 @@ async fn an_empty_catalog_keeps_expiring_roots_after_detach_and_relink() {
 async fn disabled_detection_keeps_expiring_roots_after_detach_and_relink() {
     expiry_only_after_relink("[detect]\nenabled = false\n").await;
 }
+
+#[tokio::test(start_paused = true)]
+async fn foreground_request_senders_stay_bounded_and_are_dropped_on_removal() {
+    let (core, root) = test_core();
+    let (id, _frames) = screen_agent(&core, "devin");
+    for _ in 0..4 {
+        let c = core.clone();
+        let request = tokio::spawn(async move { c.foreground(id).await });
+        tokio::task::yield_now().await;
+        assert_eq!(core.lock().foreground[&id].len(), 1, "closed senders must not accumulate");
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert_eq!(request.await.unwrap(), None);
+    }
+    core.lock().holders.clear();
+    let before = core.lock().foreground[&id].len();
+    for _ in 0..20 {
+        assert_eq!(core.foreground(id).await, None);
+    }
+    assert_eq!(core.lock().foreground[&id].len(), before, "holderless lookups enqueue nothing");
+    let (tx, rx) = oneshot::channel();
+    {
+        let mut st = core.lock();
+        st.foreground.entry(id).or_default().push(tx);
+        core.remove(&mut st, id);
+        assert!(!st.foreground.contains_key(&id));
+    }
+    assert!(rx.await.is_err(), "removal releases every pending foreground request");
+    drop(core);
+    remove_root(&root);
+}

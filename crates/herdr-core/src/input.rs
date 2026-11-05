@@ -565,9 +565,11 @@ impl Core {
         let (tx, rx) = tokio::sync::oneshot::channel();
         {
             let mut st = self.lock();
-            st.foreground.entry(id).or_default().push(tx);
             let link = st.link(id)?;
             link.send(&proto::frame(proto::FOREGROUND, id, &[]));
+            let pending = st.foreground.entry(id).or_default();
+            pending.retain(|tx| !tx.is_closed());
+            pending.push(tx);
         }
         tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok)
     }

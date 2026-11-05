@@ -838,6 +838,7 @@ impl Core {
         // Gone before it is announced: a fresh snapshot for a subscriber that
         // fell behind must not bring it back.
         st.screen_status.remove(&id);
+        st.foreground.remove(&id);
         let Some(was) = st.reg.terminals.remove(&id) else { return };
         self.emit_from(st, "removed", id, serde_json::json!({}), Some(&was));
         let _ = std::fs::remove_file(self.snapshot_path(id));
