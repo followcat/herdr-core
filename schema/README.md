@@ -154,13 +154,14 @@ Each event's `data`, and how to apply it to a snapshot:
 | `keep` | `{keep}` | set `keep` |
 | `finished` | `{reason, exit_code, signal, finished_ms}` | set `state: "finished"` and these, and drop `foreground`; status is cleared just before (a `status` event) |
 | `removed` | `{}` | drop it |
-| `status` | `{status, records, reported}`: the root status (null when cleared), every record by key, whether it ever reported | replace all three |
+| `status` | `{status, records, reported, activity?}`: the root status (null when cleared), every record by key, whether it ever reported, optional fork chronology | replace all present fields atomically |
 | `turn` | `{turn, state}`: the turn counter after a turn ended, and the word it ended on | set `turn` |
 | `title` | `{title}` | set `title` |
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
 | `foreground` | `{pid, name, argv, cwd}`, or null: the observed foreground process group's leader and folder; checked about twice a second. A missing link, timeout or failed reply retains the previous observation and emits nothing | set `foreground` |
 | `repository` (fork) | `{repository}`: complete cached origin-machine facts, including nulls | replace `repository`; see [probe contract](../docs/repository-facts.md) |
+| `activity` (fork) | `{activity}`: complete origin record clocks and scope, including removals/reset | replace `activity`; see [chronology contract](../docs/record-activity.md) |
 
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,

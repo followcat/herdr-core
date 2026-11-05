@@ -142,6 +142,13 @@ pub struct Terminal {
     /// Cached machine-side repository observation; absent on older cores.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<crate::repository::RepositoryFacts>,
+    /// Origin state/completion chronology. Absent on older cores or unsupported paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<crate::activity::Activity>,
+    /// Durable acquisition and owner evidence; never public API.
+    #[serde(default)]
+    #[schemars(skip)]
+    pub activity_guard: crate::activity::Guards,
     /// Machines (core ids) it started work on: they may call back to it.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub afar: std::collections::BTreeSet<String>,
@@ -221,6 +228,8 @@ pub fn parse_id(local: &str) -> Option<u32> {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Registry {
+    #[serde(default)]
+    pub activity_ordinal: u64,
     pub next_id: u32,
     /// The holder these terminals run under.
     pub holder: Option<String>,
@@ -318,6 +327,8 @@ impl Registry {
                 paste_gap_ms: new.template.as_ref().and_then(|t| t.paste_gap_ms),
                 foreground: None,
                 repository: None,
+                activity: None,
+                activity_guard: Default::default(),
                 afar: Default::default(),
                 template: new.template.map(|t| t.name),
                 first_message: None,
@@ -420,6 +431,7 @@ impl Registry {
 
 /// The core's own bookkeeping in the record: saved with it, never shown.
 const PRIVATE: &[&str] = &[
+    "activity_guard",
     "first_task_turn",
     "news",
     "seen",

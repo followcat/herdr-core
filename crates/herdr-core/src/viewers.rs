@@ -225,7 +225,7 @@ impl Core {
             {
                 gate.clear_draft();
             }
-            self.status_changed(st, id, change);
+            self.status_changed_observed(st, id, change, crate::activity::Evidence::Fresh(&r.id));
             word_changed |= now != was;
         }
         // Losing the holder too (a reboot) leaves no tail to replay: queue a new word,
@@ -271,6 +271,9 @@ impl Core {
             }
         };
         if change == crate::status::Change::default() {
+            if verdict.is_some() && self.update_activity(st, id, crate::activity::Evidence::Fresh("")) {
+                self.publish_activity(st, id);
+            }
             return;
         }
         let now = word(st);
@@ -287,6 +290,17 @@ impl Core {
     }
 
     pub fn status_changed(&self, st: &mut State, id: u32, change: crate::status::Change) {
+        self.status_changed_observed(st, id, change, crate::activity::Evidence::Fresh(""));
+    }
+
+    pub(crate) fn status_changed_observed(
+        &self,
+        st: &mut State,
+        id: u32,
+        change: crate::status::Change,
+        evidence: crate::activity::Evidence<'_>,
+    ) {
+        let activity_changed = self.update_activity(st, id, evidence);
         let t = st.reg.terminals.get_mut(&id).expect("reported terminal");
         let first_task_finished = t.first_task_turn.is_some_and(|turn| {
             t.turn > turn
@@ -296,14 +310,17 @@ impl Core {
         if first_task_finished {
             t.first_task_turn = None;
         }
-        let (status, records, turn, reported) = (t.status.clone(), t.records.clone(), t.turn, t.reported);
+        let (status, records, turn, reported, activity) =
+            (t.status.clone(), t.records.clone(), t.turn, t.reported, t.activity.clone());
         if change.status {
             self.emit(
                 st,
                 "status",
                 id,
-                serde_json::json!({"status": status, "records": records, "reported": reported}),
+                serde_json::json!({"status": status, "records": records, "reported": reported, "activity":activity}),
             );
+        } else if activity_changed {
+            self.publish_activity(st, id);
         }
         if change.turn_ended {
             let state = status.map(|s| s.state);

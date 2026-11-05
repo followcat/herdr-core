@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod addr;
 pub mod api;
 pub mod attach;

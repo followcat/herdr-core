@@ -15,6 +15,9 @@ pub(super) fn supported(value: &mut Value, features: &[String]) {
     if object.get("address").is_some_and(Value::is_string) && !features.iter().any(|f| f == "repository_facts") {
         object.remove("repository");
     }
+    if object.get("address").is_some_and(Value::is_string) && !features.iter().any(|f| f == "record_activity") {
+        object.remove("activity");
+    }
     for key in ["terminals", "terminal", "record"] {
         if let Some(value) = object.get_mut(key) {
             supported(value, features);
@@ -79,6 +82,16 @@ pub(super) fn mirror_events(core: &Core, m: &Machine, line: &Line, payload: &[u8
                 if msg["params"]["type"] == "repository" && !line.features.iter().any(|f| f == "repository_facts") {
                     continue;
                 }
+                if !line.features.iter().any(|f| f == "record_activity") {
+                    if msg["params"]["type"] == "activity" {
+                        continue;
+                    }
+                    if msg["params"]["type"] == "status"
+                        && let Some(data) = msg["params"]["data"].as_object_mut()
+                    {
+                        data.remove("activity");
+                    }
+                }
                 supported(&mut msg["params"]["data"], &line.features);
                 mirror_event(core, m, msg["params"].clone());
             }
@@ -137,7 +150,13 @@ pub(super) fn apply(record: &mut Value, kind: &str, data: &Value) {
             set(record, &["reason", "exit_code", "signal", "finished_ms"]);
             record.as_object_mut().map(|r| r.remove("foreground"));
         }
-        "status" => set(record, &["status", "records", "reported"]),
+        "status" => {
+            set(record, &["status", "records", "reported"]);
+            if data.get("activity").is_some() {
+                set(record, &["activity"]);
+            }
+        }
+        "activity" if data.get("activity").is_some() => set(record, &["activity"]),
         "turn" => set(record, &["turn"]),
         "title" => set(record, &["title"]),
         "labels" => set(record, &["labels"]),

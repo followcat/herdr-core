@@ -1,6 +1,42 @@
 {
   "components": {
     "schemas": {
+      "Activity": {
+        "properties": {
+          "core_id": {
+            "type": "string"
+          },
+          "epoch": {
+            "description": "A fresh process epoch, including after restore. Compare only within an origin/epoch.",
+            "type": "string"
+          },
+          "records": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Clock"
+            },
+            "description": "Root is \"\" (retained even when null); other keys match Terminal.records.",
+            "type": "object"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "core_id",
+          "epoch",
+          "scope",
+          "revision",
+          "records"
+        ],
+        "type": "object"
+      },
       "AheadBehind": {
         "properties": {
           "ahead": {
@@ -96,6 +132,27 @@
           "all"
         ],
         "type": "string"
+      },
+      "Clock": {
+        "properties": {
+          "completion_ordinal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state_ordinal": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
       },
       "CoreInfo": {
         "properties": {
@@ -804,6 +861,17 @@
       },
       "RunResult": {
         "properties": {
+          "activity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Activity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Origin state/completion chronology. Absent on older cores or unsupported paths."
+          },
           "address": {
             "description": "`t7`: this terminal forever on this core.",
             "type": "string"
@@ -1306,6 +1374,17 @@
       },
       "Terminal": {
         "properties": {
+          "activity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Activity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Origin state/completion chronology. Absent on older cores or unsupported paths."
+          },
           "address": {
             "description": "`t7`: this terminal forever on this core.",
             "type": "string"

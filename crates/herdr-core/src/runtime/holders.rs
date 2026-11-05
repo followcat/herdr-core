@@ -206,12 +206,13 @@ impl Core {
                 for r in &reports {
                     let rec = st.reg.terminals.get_mut(&id).expect("live id");
                     let change = crate::status::apply(rec, r);
-                    self.status_changed(st, id, change);
+                    self.status_changed_observed(st, id, change, crate::activity::Evidence::Fresh(&r.id));
                 }
             } else {
                 // A crash tail repeats reports we already counted: take its final word,
                 // but count at most the one turn that may have ended while we were down.
                 let (turn, was, since) = (rec.turn, rec.status.as_ref().map(|s| s.state.clone()), rec.status_ms);
+                let prior = (rec.status.clone(), rec.records.clone(), rec.reported);
                 for r in &reports {
                     crate::status::apply(rec, r);
                 }
@@ -223,7 +224,13 @@ impl Core {
                 // Only a changed final word/turn proves new activity in a crash replay.
                 // A repeated done, or done -> idle, entirely during downtime can remain unobservable.
                 let root_report = rec.turn != turn || now != was;
-                self.status_changed(st, id, crate::status::Change { root_report, ..Default::default() });
+                let status = prior != (rec.status.clone(), rec.records.clone(), rec.reported);
+                self.status_changed_observed(
+                    st,
+                    id,
+                    crate::status::Change { status, root_report, ..Default::default() },
+                    crate::activity::Evidence::Replay,
+                );
             }
             // The screen was replaced under detection: cached and in-flight
             // verdicts belong to the screen the old core saw, so both
@@ -417,6 +424,7 @@ impl Core {
                 t.reason = None;
                 t.exit_code = None;
                 t.signal = None;
+                crate::activity::initialize(t, &self.info.id, &self.activity_epoch);
                 let created = t.clone();
                 let public = serde_json::to_value(crate::terminals::Public(created.clone())).unwrap_or_default();
                 self.emit(st, if restarted { "restarted" } else { "created" }, id, public);

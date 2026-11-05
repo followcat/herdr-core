@@ -94,9 +94,8 @@ fn the_public_record_shows_facts_not_bookkeeping() {
     let t = run(&s, &["sh", "-c", "echo hi; sleep 100"]);
     wait_text(&s, &t, "hi");
     for record in [get(&s, &t), s.json(&["label", &t, "k=v"])] {
-        let text = record.to_string();
-        for private in ["\"news\"", "\"seen\"", "\"scope\"", "\"holder\"", "\"printed\""] {
-            assert!(!text.contains(private), "{private} in {text}");
+        for private in ["news", "seen", "scope", "holder", "printed", "activity_guard"] {
+            assert!(record.get(private).is_none(), "{private} in {record}");
         }
     }
     assert_eq!(get(&s, &t)["address"], t.as_str());

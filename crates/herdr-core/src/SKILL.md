@@ -95,6 +95,12 @@ Fork viewer APIs may negotiate `quiet_human_release` on attach: kind 7 carries
 human release bytes through that same input gate without taking size/display
 ownership. Require both the hello feature and attach confirmation; otherwise use
 DATA. Automatic terminal replies are a different input category.
+
+Fork full records expose `activity` when `record_activity` is supported: per-record state and
+completion ordinals, qualified by origin core, process epoch and scope. Status events carry it
+atomically; `activity` events publish scope/reset-only changes. Startup readiness does not mean
+completed work. This is separate from turns and parent notifications. Acknowledgement stays
+client-local; inventory does not prove output consumption. See `docs/record-activity.md`.
 Leaving `blocked` also releases the draft, such as after a single-key
 approval. Other status changes do not consume human typing.
 After three minutes the draft hold

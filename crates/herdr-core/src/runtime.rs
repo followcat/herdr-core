@@ -34,6 +34,7 @@ pub(crate) struct TestObservations {
 }
 
 pub struct Core {
+    pub(crate) activity_epoch: String,
     pub info: CoreInfo,
     pub started: Instant,
     pub stop: Notify,
@@ -227,6 +228,8 @@ fn finish_reason(killed: bool, stopping: bool, host_shutdown: bool) -> &'static 
 impl Core {
     pub fn start(paths: Paths, info: CoreInfo) -> io::Result<Arc<Core>> {
         let mut reg: Registry = read_state(&paths.state.join("terminals.json"))?;
+        let activity_epoch = platform::random_hex();
+        crate::activity::restore(&mut reg, &info.id, &activity_epoch);
         // The agent identity is not serialized. Rehydrate from the saved
         // foreground facts before locks, holder readers or workers exist.
         for t in reg.terminals.values_mut() {
@@ -250,6 +253,7 @@ impl Core {
         let peers = read_state(&paths.state.join("peers.json"))?;
         let (jobs, jobs_rx) = tokio::sync::mpsc::unbounded_channel();
         let core = Arc::new(Core {
+            activity_epoch,
             info,
             started: Instant::now(),
             stop: Notify::new(),
@@ -360,6 +364,10 @@ impl Core {
         if let Some(t) = st.reg.terminals.get_mut(&id) {
             t.first_task_turn = None;
             let change = crate::status::reset(t);
+            let reset = self.reset_activity(st, id);
+            if reset && !change.status {
+                self.publish_activity(st, id);
+            }
             self.status_changed(st, id, change);
         }
         st.reg.finish(id, exit.code, exit.signal, reason, now_ms());
