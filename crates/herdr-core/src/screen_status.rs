@@ -114,6 +114,8 @@ impl Core {
     /// all in a single awaited blocking task, then commit under per-terminal
     /// re-locks. Nothing overlaps passes — the caller is the only driver.
     pub(crate) async fn screen_status_pass(&self, catalog: &Catalog) {
+        #[cfg(test)]
+        self.observations.screen_status_passes.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if catalog.agents().next().is_none() {
             // Disabled/empty detection can never collect or confirm, but
             // adoption may restore another root at any time. Keep expiring

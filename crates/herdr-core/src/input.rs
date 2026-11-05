@@ -571,7 +571,17 @@ impl Core {
             pending.retain(|tx| !tx.is_closed());
             pending.push(tx);
         }
-        tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok).filter(|pid| *pid > 0)
+        let reply = tokio::time::timeout(Duration::from_secs(1), rx).await;
+        #[cfg(test)]
+        if reply.is_err() {
+            self.observations.foreground_timeouts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        let pgid = reply.ok().and_then(Result::ok);
+        #[cfg(test)]
+        if pgid.is_some_and(|pid| pid <= 0) {
+            self.observations.foreground_nonpositive.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        pgid.filter(|pid| *pid > 0)
     }
 }
 

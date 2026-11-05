@@ -42,12 +42,19 @@ impl Core {
             for id in live {
                 let generation = self.lock().screen_status.get(&id).map_or(0, |w| w.generation);
                 let observation = match self.foreground(id).await {
-                    Some(pgid) => crate::platform::observe_foreground(pgid).ok(),
+                    Some(pgid) => {
+                        let result = crate::platform::observe_foreground(pgid);
+                        #[cfg(test)]
+                        if result.is_err() {
+                            self.observations.foreground_read_errors.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        }
+                        result.ok()
+                    }
                     None => None,
                 };
                 let Some(now) = observation else {
                     #[cfg(test)]
-                    self.foreground_unknown.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    self.observations.foreground_unknown.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     continue;
                 };
                 let mut st = self.lock();

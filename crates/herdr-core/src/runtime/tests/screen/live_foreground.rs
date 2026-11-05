@@ -1,5 +1,5 @@
 use super::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Reply {
@@ -187,11 +187,11 @@ impl LiveHolder {
         (t.turn, t.news, st.events.seq)
     }
 
-    async fn wait_unknown(&self, baseline: (u64, u64, u64), after: u64) {
+    async fn wait_outcome(&self, baseline: (u64, u64, u64), counter: &AtomicU64, after: u64) {
         let deadline = Instant::now() + Duration::from_secs(8);
-        while self.core.foreground_unknown.load(Ordering::SeqCst) <= after {
+        while counter.load(Ordering::SeqCst) <= after {
             self.unchanged(baseline);
-            assert!(Instant::now() < deadline, "the watcher never acknowledged an unknown outcome");
+            assert!(Instant::now() < deadline, "the expected worker/lookup outcome was never acknowledged");
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         self.unchanged(baseline);
@@ -249,11 +249,10 @@ async fn real_watchers_preserve_and_silently_reconfirm_across_relink() {
         assert!(Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let detached = Instant::now();
-    while detached.elapsed() < Duration::from_millis(1100) {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        live.unchanged(baseline);
-    }
+    let unknown = live.core.observations.foreground_unknown.load(Ordering::SeqCst);
+    let passes = live.core.observations.screen_status_passes.load(Ordering::SeqCst);
+    live.wait_outcome(baseline, &live.core.observations.foreground_unknown, unknown + 1).await;
+    live.wait_outcome(baseline, &live.core.observations.screen_status_passes, passes + 1).await;
     live.core.take_over(platform::connect(&live.socket).unwrap(), false, &live.socket, None).unwrap();
     assert!(live.core.lock().screen_status[&live.id].unconfirmed_until.is_some());
     while live.core.lock().screen_status[&live.id].unconfirmed_until.is_some() {
@@ -270,11 +269,10 @@ async fn real_watchers_preserve_and_silently_reconfirm_across_relink() {
 async fn a_slow_linked_holder_is_unknown_and_preserves_a_confirmed_root() {
     let live = LiveHolder::start(Reply::Slow).await;
     let baseline = live.baseline();
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(1850) {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        live.unchanged(baseline);
-    }
+    let unknown = live.core.observations.foreground_unknown.load(Ordering::SeqCst);
+    let timeouts = live.core.observations.foreground_timeouts.load(Ordering::SeqCst);
+    live.wait_outcome(baseline, &live.core.observations.foreground_timeouts, timeouts).await;
+    live.wait_outcome(baseline, &live.core.observations.foreground_unknown, unknown).await;
     assert!(live.requests.load(Ordering::SeqCst) > 0);
     assert!(live.core.lock().link(live.id).is_some(), "the holder stayed linked throughout the timeout");
     live.finish().await;
@@ -284,13 +282,10 @@ async fn a_slow_linked_holder_is_unknown_and_preserves_a_confirmed_root() {
 async fn a_malformed_foreground_reply_is_unknown_and_preserves_the_root() {
     let live = LiveHolder::start(Reply::Malformed).await;
     let baseline = live.baseline();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while live.requests.load(Ordering::SeqCst) == 0 {
-        assert!(Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    live.unchanged(baseline);
+    let unknown = live.core.observations.foreground_unknown.load(Ordering::SeqCst);
+    let malformed = live.core.observations.foreground_bad_replies.load(Ordering::SeqCst);
+    live.wait_outcome(baseline, &live.core.observations.foreground_bad_replies, malformed).await;
+    live.wait_outcome(baseline, &live.core.observations.foreground_unknown, unknown).await;
     live.finish().await;
 }
 
@@ -299,8 +294,10 @@ async fn nonpositive_foreground_replies_are_unknown_while_the_agent_lives() {
     for reply in [Reply::Negative, Reply::Zero] {
         let live = LiveHolder::start(reply).await;
         let baseline = live.baseline();
-        let unknown = live.core.foreground_unknown.load(Ordering::SeqCst);
-        live.wait_unknown(baseline, unknown).await;
+        let unknown = live.core.observations.foreground_unknown.load(Ordering::SeqCst);
+        let negative = live.core.observations.foreground_nonpositive.load(Ordering::SeqCst);
+        live.wait_outcome(baseline, &live.core.observations.foreground_nonpositive, negative).await;
+        live.wait_outcome(baseline, &live.core.observations.foreground_unknown, unknown).await;
         assert!(live.core.lock().link(live.id).is_some());
         assert!(!live.core.lock().screen_status[&live.id].foreground_observed);
         live.finish().await;
@@ -323,8 +320,10 @@ async fn an_unreadable_live_foreground_is_unknown_without_a_turn_or_marker() {
     assert!(PathBuf::from(format!("/proc/{pid}")).exists());
     assert_eq!(std::fs::read_link(format!("/proc/{pid}/cwd")).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
     live.core.lock().screen_status.get_mut(&live.id).unwrap().foreground_observed = false;
-    let unknown = live.core.foreground_unknown.load(Ordering::SeqCst);
-    live.wait_unknown(baseline, unknown).await;
+    let unknown = live.core.observations.foreground_unknown.load(Ordering::SeqCst);
+    let unreadable = live.core.observations.foreground_read_errors.load(Ordering::SeqCst);
+    live.wait_outcome(baseline, &live.core.observations.foreground_read_errors, unreadable).await;
+    live.wait_outcome(baseline, &live.core.observations.foreground_unknown, unknown).await;
     assert!(!live.core.lock().screen_status[&live.id].foreground_observed);
     live.finish().await;
 }

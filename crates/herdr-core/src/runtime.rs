@@ -20,6 +20,18 @@ use tokio::sync::{Notify, oneshot};
 mod persistence;
 use persistence::RegistryWriter;
 
+/// Outcome acknowledgements for real-time tests; absent from production.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct TestObservations {
+    pub foreground_unknown: std::sync::atomic::AtomicU64,
+    pub foreground_timeouts: std::sync::atomic::AtomicU64,
+    pub foreground_bad_replies: std::sync::atomic::AtomicU64,
+    pub foreground_read_errors: std::sync::atomic::AtomicU64,
+    pub foreground_nonpositive: std::sync::atomic::AtomicU64,
+    pub screen_status_passes: std::sync::atomic::AtomicU64,
+}
+
 pub struct Core {
     pub info: CoreInfo,
     pub started: Instant,
@@ -28,9 +40,8 @@ pub struct Core {
     pub restart: std::sync::atomic::AtomicBool,
     pub paths: Paths,
     pub state: Mutex<State>,
-    /// Completed unknown watcher observations, acknowledged by real-time tests.
     #[cfg(test)]
-    pub(crate) foreground_unknown: std::sync::atomic::AtomicU64,
+    pub(crate) observations: TestObservations,
     /// Woken on every lifecycle change; waiters re-check what they need.
     pub changed: Notify,
     /// Work for the runtime that the holder thread can't do itself.
@@ -242,7 +253,7 @@ impl Core {
             paths,
             state: Mutex::new(State { reg, docs, machines, peers, ..Default::default() }),
             #[cfg(test)]
-            foreground_unknown: Default::default(),
+            observations: Default::default(),
             changed: Notify::new(),
             jobs,
             jobs_rx: Mutex::new(Some(jobs_rx)),
@@ -698,6 +709,10 @@ impl Core {
                 }
                 proto::FOREGROUND_IS => {
                     let reply = proto::parse::<proto::Foreground>(&payload);
+                    #[cfg(test)]
+                    if reply.is_err() {
+                        self.observations.foreground_bad_replies.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    }
                     for tx in st.foreground.remove(&id).unwrap_or_default() {
                         if let Ok(foreground) = &reply {
                             let _ = tx.send(foreground.pgid);
