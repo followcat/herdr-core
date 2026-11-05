@@ -47,7 +47,7 @@ pub(super) fn machine(
                 Err(e) if (p.install || at_terminal()) && matches!(e.kind.as_str(), "hc_missing" | "incompatible") => {
                     let what = if e.kind == "hc_missing" { "has no hc" } else { "has an hc too old to talk to" };
                     if !p.install {
-                        eprint!("{target} {what}. Copy this hc ({}) there? [Y/n] ", env!("CARGO_PKG_VERSION"));
+                        eprint!("{target} {what}. Copy this hc ({}) there? [Y/n] ", crate::build_version());
                         let mut answer = String::new();
                         std::io::stdin().read_line(&mut answer).map_err(|err| RpcError::internal(err.to_string()))?;
                         if answer.trim().to_lowercase().starts_with('n') {

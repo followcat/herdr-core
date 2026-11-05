@@ -57,6 +57,26 @@ impl Session {
         Session { root, env: vec![("HC_SETTLE_MS".into(), "0".into())], bin: BIN.into() }
     }
 
+    /// The same CLI compiled as a test target with a numeric version.
+    pub fn release() -> Session {
+        let mut s = Self::new();
+        let deps = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+        s.bin = std::fs::read_dir(deps)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_file()
+                    && p.extension().is_none()
+                    && p.file_name().unwrap().to_string_lossy().starts_with("release_cli-")
+            })
+            .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
+            .expect("build the fixture too: cargo test --test release_cli --test <test>");
+        let out = s.hc(&["--version"]);
+        assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), format!("hc {}", release_version()));
+        s
+    }
+
     pub fn cmd(&self) -> Command {
         self.program(&self.bin)
     }
@@ -68,6 +88,7 @@ impl Session {
             .env("PATH", std::env::var("PATH").unwrap_or_default())
             .env("HOME", &self.root)
             .env("HC_SESSION", "test")
+            .env("HC_TEST_RELEASE_CLI", "1")
             .env("XDG_RUNTIME_DIR", self.root.join("run"))
             .env("XDG_STATE_HOME", self.root.join("state"))
             .env("XDG_CONFIG_HOME", self.root.join("config"))
@@ -237,7 +258,7 @@ pub fn fake_ssh(local: &Session, hosts: &[(&str, &Session)]) -> (String, String)
         // `<root>/fakebin` first: a test can give a machine its own `uname`.
         let bin_dir = format!("{r}/fakebin:{}", s.bin.parent().unwrap().display());
         cases.push_str(&format!(
-            "  *{host}*) exec env -i HOME={r} PATH={bin_dir}:/usr/bin:/bin HC_SESSION=test HC_SETTLE_MS=0 \
+            "  *{host}*) exec env -i HOME={r} PATH={bin_dir}:/usr/bin:/bin HC_SESSION=test HC_SETTLE_MS=0 HC_TEST_RELEASE_CLI=1 \
              XDG_RUNTIME_DIR={r}/run XDG_STATE_HOME={r}/state XDG_CONFIG_HOME={r}/config sh -c \"$*\" ;;\n"
         ));
     }
@@ -259,6 +280,11 @@ pub fn fake_ssh(local: &Session, hosts: &[(&str, &Session)]) -> (String, String)
 /// On a runner too loaded to keep fixed timings (CI): timing-only checks skip.
 pub fn slow_runner() -> bool {
     std::env::var_os("HC_TEST_SLOW_RUNNER").is_some()
+}
+
+/// Numeric version used only by the release CLI fixture.
+pub fn release_version() -> &'static str {
+    env!("CARGO_PKG_VERSION").split('-').next().unwrap()
 }
 
 /// `X.Y.Z` names a published release; a fork suffix names none. Release

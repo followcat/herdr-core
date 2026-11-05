@@ -230,25 +230,29 @@ fn a_windows_probe_keeps_native_core_errors() {
 }
 
 #[test]
-fn a_windows_machine_with_git_sh_installs_the_native_build_when_missing() {
-    if !released_build() {
-        // Windows always downloads a release zip: a fork build refuses it
-        // instead of silently replacing itself with an official release.
-        let mut s = Session::new();
-        let wrapper = s.root.join("windows-ssh");
-        std::fs::write(
-            &wrapper,
-            "#!/bin/sh\ncase \"$2\" in 'uname -sm') echo 'MINGW64_NT-10.0 x86_64'; exit 0;; esac\n\
-             echo 'herdr-core is not installed here' >&2\nexit 127\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&wrapper, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-        s.env.push(("HC_SSH".into(), wrapper.display().to_string()));
-        let (_, e) = s.err(&["--json", "machine", "add", "windows", "--install"]);
-        assert_eq!(e["error"]["kind"], "refused", "{e}");
-        assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
+fn a_fork_refuses_a_windows_release_install() {
+    if released_build() {
         return;
     }
+    // Windows always downloads a release zip: a fork build refuses it
+    // instead of silently replacing itself with an official release.
+    let mut s = Session::new();
+    let wrapper = s.root.join("windows-ssh");
+    std::fs::write(
+        &wrapper,
+        "#!/bin/sh\ncase \"$2\" in 'uname -sm') echo 'MINGW64_NT-10.0 x86_64'; exit 0;; esac\n\
+         echo 'herdr-core is not installed here' >&2\nexit 127\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    s.env.push(("HC_SSH".into(), wrapper.display().to_string()));
+    let (_, e) = s.err(&["--json", "machine", "add", "windows", "--install"]);
+    assert_eq!(e["error"]["kind"], "refused", "{e}");
+    assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
+}
+
+#[test]
+fn a_windows_machine_with_git_sh_installs_the_native_build_when_missing() {
     for (uname, sh_error, sh_code, missing_error) in [
         ("MINGW64_NT-10.0 x86_64", "", 0, "is not recognized"),
         ("MSYS_NT-10.0 x86_64", "", 0, "is not recognized"),
@@ -262,17 +266,17 @@ fn a_windows_machine_with_git_sh_installs_the_native_build_when_missing() {
         ),
     ] {
         let rohan = Session::new();
-        let mut s = Session::new();
+        let mut s = Session::release();
         let (_, ssh) = fake_ssh(&s, &[("rohan", &rohan)]);
         let bin = s.root.join("bin");
         std::fs::create_dir(&bin).unwrap();
-        let releases = s.root.join(format!("releases/core/{}", env!("CARGO_PKG_VERSION")));
+        let releases = s.root.join(format!("releases/core/{}", release_version()));
         std::fs::create_dir_all(&releases).unwrap();
         std::fs::write(releases.join("windows.zip"), b"windows test build").unwrap();
         std::fs::write(
             releases.join("manifest.json"),
             json!({
-                "version": env!("CARGO_PKG_VERSION"), "generation": 1,
+                "version": release_version(), "generation": 1,
                 "targets": {"windows-x86_64": {
                     "url": format!("file://{}/windows.zip", releases.display()),
                     "sha256": "2ab258378fc8f9fb3de76603fe051843b98403eb35246087e05a6912ab85b88d"

@@ -22,7 +22,7 @@ use output::*;
 use update::*;
 
 #[derive(Parser)]
-#[command(name = "hc", version, about = "herdr-core: a terminal runtime for coding agents")]
+#[command(name = "hc", version = crate::build_version(), about = "herdr-core: a terminal runtime for coding agents")]
 struct Cli {
     /// JSON output even in a terminal.
     #[arg(long, global = true)]
@@ -585,7 +585,7 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
             // A fork build never turns into an official release by itself:
             // updating it is an explicit `hc update --from <binary>`.
             crate::releases::no_release_for_this_build("hc update")?;
-            let this = format!("hc {}", env!("CARGO_PKG_VERSION"));
+            let this = format!("hc {}", crate::build_version());
             if let Some(v) = &version
                 && !force
                 && !older(&this, &format!("hc {v}"))
@@ -598,7 +598,7 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
             let scratch = crate::releases::Scratch::new()?;
             let requested = version
                 .as_deref()
-                .map(|v| if !force && !older(&this, &format!("hc {v}")) { env!("CARGO_PKG_VERSION") } else { v });
+                .map(|v| if !force && !older(&this, &format!("hc {v}")) { crate::build_version() } else { v });
             let m = crate::releases::manifest(requested, &scratch.0)?;
             // Apps and scripts built for this generation would break on another one.
             if m.generation != crate::api::GENERATION && !force {

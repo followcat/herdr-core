@@ -39,7 +39,7 @@ fn unavailable(why: String) -> RpcError {
 /// the fork. Every release-download path refuses first: `what` names the
 /// attempted action for the message.
 pub fn no_release_for_this_build(what: &str) -> Result<(), RpcError> {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::build_version();
     let parts: Vec<&str> = version.split('.').collect();
     let number = |p: &&str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
     if parts.len() == 3 && parts.iter().all(number) {

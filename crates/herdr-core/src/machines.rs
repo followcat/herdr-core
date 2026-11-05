@@ -491,7 +491,7 @@ pub fn install(paths: &crate::paths::Paths, to: Reach, session: Option<&str>) ->
     let bin = if there == here && (bundle || !current.ends_with("Herdr Core.app/Contents/MacOS/herdr-core")) {
         current
     } else {
-        let version = env!("CARGO_PKG_VERSION");
+        let version = crate::build_version();
         crate::releases::no_release_for_this_build(&format!("installing hc {version} on {target}"))?;
         let not_released = |_| {
             RpcError::new(
@@ -562,7 +562,7 @@ fn install_payload(bin: &Path, scratch: &Path) -> Result<(Vec<u8>, bool), RpcErr
 /// home folder, and the installer runs from them (no download there). It
 /// swaps an hc already there the planned way, so its terminals keep running.
 fn install_windows(paths: &crate::paths::Paths, target: &str, session: Option<&str>) -> Result<String, RpcError> {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::build_version();
     crate::releases::no_release_for_this_build(&format!("installing hc {version} on {target}"))?;
     let scratch = crate::releases::Scratch::new()?;
     let m = crate::releases::manifest(Some(version), &scratch.0).map_err(|_| {

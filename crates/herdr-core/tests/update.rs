@@ -8,20 +8,25 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 
 #[test]
-fn an_up_to_date_binary_restarts_only_an_older_running_core() {
-    let mut s = Session::new();
-    let version = env!("CARGO_PKG_VERSION");
-    if !released_build() {
-        // A fork build never downloads an official release: every release
-        // update path refuses and points at `hc update --from <binary>`.
-        for args in [&["update"][..], &["update", "--version", "0.1.16"], &["update", "--version", "999.0.0"]] {
-            let (_, e) = s.err(&[&["--json"], args].concat());
-            assert_eq!(e["error"]["kind"], "refused", "{args:?}: {e}");
-            assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{args:?}: {e}");
-        }
-        assert!(!s.connect_ok(), "checking an absent core must not start one");
+fn a_fork_refuses_every_release_update_without_starting_a_core() {
+    if released_build() {
         return;
     }
+    let s = Session::new();
+    // A fork build never downloads an official release: every release
+    // update path refuses and points at `hc update --from <binary>`.
+    for args in [&["update"][..], &["update", "--version", "0.1.16"], &["update", "--version", "999.0.0"]] {
+        let (_, e) = s.err(&[&["--json"], args].concat());
+        assert_eq!(e["error"]["kind"], "refused", "{args:?}: {e}");
+        assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{args:?}: {e}");
+    }
+    assert!(!s.connect_ok(), "checking an absent core must not start one");
+}
+
+#[test]
+fn an_up_to_date_binary_restarts_only_an_older_running_core() {
+    let mut s = Session::release();
+    let version = release_version();
     std::fs::create_dir_all(s.root.join("core")).unwrap();
     std::fs::write(
         s.root.join("core/latest.json"),

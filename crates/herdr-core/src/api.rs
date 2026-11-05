@@ -152,7 +152,7 @@ methods! { Ctx<'_>;
 }
 
 fn version() -> String {
-    env!("CARGO_PKG_VERSION").into()
+    crate::build_version().into()
 }
 
 fn resolve(core: &Core, address: &str) -> Result<u32, RpcError> {

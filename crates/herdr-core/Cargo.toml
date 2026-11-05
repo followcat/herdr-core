@@ -9,6 +9,12 @@ publish.workspace = true
 name = "herdr-core"
 path = "src/main.rs"
 
+# A CLI fixture compiled with cfg(test); never built or packaged as a binary.
+[[test]]
+name = "release_cli"
+path = "tests/release_cli.rs"
+harness = false
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 ghostty-vt = { path = "../ghostty-vt" }

@@ -36,3 +36,10 @@ pub mod terminals;
 pub mod viewers;
 pub mod wait;
 pub mod wire;
+
+/// The version compiled into every CLI, API and installation decision.
+/// Test targets also exercise official release paths on fork branches.
+pub fn build_version() -> &'static str {
+    let version = env!("CARGO_PKG_VERSION");
+    if cfg!(test) { version.split('-').next().unwrap() } else { version }
+}

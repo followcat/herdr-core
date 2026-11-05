@@ -7,7 +7,7 @@
 mod common;
 
 use common::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command};
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
@@ -40,15 +40,17 @@ impl Releases {
         let url = format!("http://127.0.0.1:{port}");
         let dir = root.join("core").join(version);
         std::fs::create_dir_all(&dir).unwrap();
-        let bin_dir = Path::new(BIN).parent().unwrap();
+        let bin_dir = root.join("build");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::copy(&s.bin, bin_dir.join("herdr-core")).unwrap();
         for t in targets {
             let tar = dir.join(format!("herdr-core-{t}.tar.gz"));
             if cfg!(target_os = "macos") && t.starts_with("macos-") {
                 let app = s.root.join("Herdr Core.app");
                 let standalone = s.root.join("herdr-core");
-                std::fs::copy(BIN, &standalone).unwrap();
+                std::fs::copy(&s.bin, &standalone).unwrap();
                 for (script, args) in [
-                    ("mac-bundle", vec![PathBuf::from(BIN), app.clone()]),
+                    ("mac-bundle", vec![s.bin.clone(), app.clone()]),
                     ("mac-sign", vec![app.clone()]),
                     ("mac-sign", vec![standalone]),
                     ("package", vec![app, tar]),
@@ -69,7 +71,7 @@ impl Releases {
                     .arg("-czf")
                     .arg(&tar)
                     .arg("-C")
-                    .arg(bin_dir)
+                    .arg(&bin_dir)
                     .arg("herdr-core")
                     .status()
                     .unwrap()
@@ -249,16 +251,13 @@ fn bundle_completion_skips_releases_without_a_bundle() {
 #[cfg(target_os = "macos")]
 #[test]
 fn machine_installs_keep_the_complete_bundle_and_both_aliases() {
-    if !released_build() {
-        return; // a fork build refuses release downloads; tests/machines.rs covers that
-    }
     for cross_arch in [false, true] {
         use std::os::unix::fs::PermissionsExt;
         let mut remote = Session::new();
         remote.bin = remote.root.join(".local/bin/herdr-core");
-        let mut local = Session::new();
+        let mut local = Session::release();
         let target = if cross_arch { "macos-x86_64" } else { &here() };
-        let r = Releases::new(&local, THIS, &[target]);
+        let r = Releases::new(&local, release_version(), &[target]);
         let source = local.root.join("Herdr Core.app/Contents/MacOS/herdr-core");
         let installed = local.root.join(".local/bin/herdr-core");
         std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
@@ -384,7 +383,7 @@ fn a_bundle_update_preserves_read_only_aliases_to_the_active_executable() {
     let source = s.root.join("Herdr Core.app/Contents/MacOS/herdr-core");
     let path_bin = s.root.join("path-bin");
     std::fs::create_dir(&path_bin).unwrap();
-    let install = |dest: &Path| {
+    let install = |dest: &std::path::Path| {
         s.program(source.to_str().unwrap())
             .arg("--hc-install-bundle")
             .arg(&source)
@@ -449,7 +448,7 @@ fn a_bundle_install_preserves_an_unrelated_hc_symlink() {
         .unwrap();
     assert!(out.status.success(), "{out:?}");
     s.bin = bin.join("herdr-core");
-    assert_eq!(std::fs::read_link(bin.join("hc")).unwrap(), Path::new("/usr/bin/true"));
+    assert_eq!(std::fs::read_link(bin.join("hc")).unwrap(), std::path::Path::new("/usr/bin/true"));
 }
 
 #[cfg(target_os = "macos")]
@@ -562,14 +561,11 @@ fn the_install_script_marks_only_plain_release_downloads() {
 
 #[test]
 fn hc_update_downloads_checks_and_swaps() {
-    if !released_build() {
-        return; // a fork build refuses release updates; tests/update.rs covers that
-    }
-    let mut s = Session::new();
+    let mut s = Session::release();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let dir = s.root.join("bin");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(BIN, dir.join("herdr-core")).unwrap();
+    std::fs::copy(&s.bin, dir.join("herdr-core")).unwrap();
     s.bin = dir.join("herdr-core");
     s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
     let pid = s.json(&["server", "status"])["pid"].clone();
@@ -587,14 +583,11 @@ fn hc_update_downloads_checks_and_swaps() {
 
 #[test]
 fn hc_update_to_a_version_takes_at_least_that_one() {
-    if !released_build() {
-        return; // a fork build refuses release updates; tests/update.rs covers that
-    }
-    let mut s = Session::new();
+    let mut s = Session::release();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let dir = s.root.join("bin");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(BIN, dir.join("herdr-core")).unwrap();
+    std::fs::copy(&s.bin, dir.join("herdr-core")).unwrap();
     s.bin = dir.join("herdr-core");
     s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
     s.json(&["server", "status"]);
@@ -613,17 +606,14 @@ fn hc_update_to_a_version_takes_at_least_that_one() {
 
 #[test]
 fn hc_update_never_takes_a_release_of_another_generation() {
-    if !released_build() {
-        return; // a fork build refuses release updates; tests/update.rs covers that
-    }
-    let mut s = Session::new();
+    let mut s = Session::release();
     let r = Releases::new(&s, NEWER, &[&here()]);
     let latest = r.root.join("core/latest.json");
     let breaking = std::fs::read_to_string(&latest).unwrap().replace("\"generation\": 1", "\"generation\": 2");
     std::fs::write(&latest, breaking).unwrap();
     let dir = s.root.join("bin");
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(BIN, dir.join("herdr-core")).unwrap(); // never the build under test
+    std::fs::copy(&s.bin, dir.join("herdr-core")).unwrap(); // never the build under test
     s.bin = dir.join("herdr-core");
     s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
     let (_, e) = s.err(&["--json", "update"]);
@@ -634,35 +624,37 @@ fn hc_update_never_takes_a_release_of_another_generation() {
 
 #[test]
 fn a_machine_of_another_cpu_gets_the_released_build_for_it() {
-    let mut odd = Session::new();
-    odd.bin = odd.root.join("bin/herdr-core"); // no hc there yet
-    std::fs::create_dir_all(odd.root.join("fakebin")).unwrap();
-    let other = if std::env::consts::ARCH == "aarch64" { "x86_64" } else { "aarch64" };
-    let os = if std::env::consts::OS == "macos" { "Darwin" } else { "Linux" };
-    let uname = odd.root.join("fakebin/uname");
-    std::fs::write(&uname, format!("#!/bin/sh\necho '{os} {other}'\n")).unwrap();
-    std::fs::set_permissions(&uname, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    for release in [false, true] {
+        let mut odd = Session::new();
+        odd.bin = odd.root.join("bin/herdr-core"); // no hc there yet
+        std::fs::create_dir_all(odd.root.join("fakebin")).unwrap();
+        let other = if std::env::consts::ARCH == "aarch64" { "x86_64" } else { "aarch64" };
+        let os = if std::env::consts::OS == "macos" { "Darwin" } else { "Linux" };
+        let uname = odd.root.join("fakebin/uname");
+        std::fs::write(&uname, format!("#!/bin/sh\necho '{os} {other}'\n")).unwrap();
+        std::fs::set_permissions(&uname, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
 
-    let mut s = Session::new();
-    // The "other CPU" build is this binary, so it runs on the fake machine.
-    let target = format!("{}-{other}", std::env::consts::OS);
-    let r = Releases::new(&s, THIS, &[&target]);
-    s.env.push(fake_ssh(&s, &[("odd", &odd)]));
-    s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
-    if !released_build() {
-        // A cross-platform install requests this version's release; a fork
-        // build names no release, so it refuses and says to use --from.
-        let (_, e) = s.err(&["--json", "machine", "add", "odd", "--install"]);
-        assert_eq!(e["error"]["kind"], "refused", "{e}");
-        assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
-        assert!(!odd.root.join(".local/bin/herdr-core").exists(), "nothing was copied");
-        return;
+        let mut s = if release { Session::release() } else { Session::new() };
+        // The "other CPU" build is this binary, so it runs on the fake machine.
+        let target = format!("{}-{other}", std::env::consts::OS);
+        let r = Releases::new(&s, if release { release_version() } else { THIS }, &[&target]);
+        s.env.push(fake_ssh(&s, &[("odd", &odd)]));
+        s.env.push(("HERDR_RELEASES_URL".into(), r.url.clone()));
+        if !release && !released_build() {
+            // A cross-platform install requests this version's release; a fork
+            // build names no release, so it refuses and says to use --from.
+            let (_, e) = s.err(&["--json", "machine", "add", "odd", "--install"]);
+            assert_eq!(e["error"]["kind"], "refused", "{e}");
+            assert!(e["error"]["hint"].as_str().unwrap().contains("--from"), "{e}");
+            assert!(!odd.root.join(".local/bin/herdr-core").exists(), "nothing was copied");
+            continue;
+        }
+        let t = run(&s, &["sh", "-c", &format!("{} machine add odd; echo added-$?; sleep 100", s.bin.display())]);
+        wait_until("the offer", || text(&s, &t).contains("[Y/n]"));
+        s.json(&["send", &t, "y"]);
+        wait_until("added", || text(&s, &t).contains("added-0"));
+        assert!(odd.root.join(".local/bin/herdr-core").is_file());
+        odd.bin = odd.root.join(".local/bin/herdr-core");
+        drop(r);
     }
-    let t = run(&s, &["sh", "-c", &format!("{BIN} machine add odd; echo added-$?; sleep 100")]);
-    wait_until("the offer", || text(&s, &t).contains("[Y/n]"));
-    s.json(&["send", &t, "y"]);
-    wait_until("added", || text(&s, &t).contains("added-0"));
-    assert!(odd.root.join(".local/bin/herdr-core").is_file());
-    odd.bin = odd.root.join(".local/bin/herdr-core");
-    drop(r);
 }
