@@ -99,7 +99,8 @@ fn full_width_box(lines: &[&str]) -> Option<(usize, usize)> {
         if let Some(end) = bottom
             && lines[i + 1..end].iter().find(|l| !l.trim().is_empty()).is_some_and(|l| {
                 let l = l.trim_start();
-                l == "❯" || l.starts_with("❯ ")
+                matches!(l.chars().next(), Some('❯' | '!' | '>'))
+                    && (l.chars().count() == 1 || l.chars().nth(1) == Some(' '))
             })
         {
             return Some((i, end));
@@ -131,13 +132,36 @@ pub fn after_last_full_width_rule(content: &str) -> &str {
     from_line(content, last + 1)
 }
 
-/// UI outside a verified composer: below its last full-width rule. If no
-/// box exists (e.g. a trust overlay, even with a scrolled divider), all text
-/// is eligible. Draft rows in a verified box are never returned.
+// A composer may have an unrecognized prefix or a clipped/mismatched
+// edge. Its draft is still ineligible for trust evidence. Numbered menu
+// choices (including the trust overlay's own ❯ 1.) are not prompt rows.
+fn possible_prompt(line: &str) -> bool {
+    let line = line.trim_start();
+    let mut chars = line.chars();
+    let Some(_) = chars.next() else { return false };
+    if !chars.as_str().starts_with(' ') && !chars.as_str().is_empty() {
+        return false;
+    }
+    let rest = chars.as_str().trim_start();
+    !rest.trim_start_matches(|c: char| c.is_ascii_digit()).starts_with(". ")
+}
+
+/// UI outside a verified composer: below its last full-width rule. An
+/// apparent but unverifiable composer returns no evidence. With no composer
+/// (e.g. a trust overlay, even with a scrolled divider), all text is eligible.
 pub fn outside_full_width_prompt_box(content: &str) -> &str {
     let lines: Vec<&str> = content.lines().collect();
+    let rule = last_full_width_rule(&lines);
     if full_width_box(&lines).is_some() {
-        return last_full_width_rule(&lines).map_or("", |(last, _)| from_line(content, last + 1));
+        return rule.map_or("", |(last, _)| from_line(content, last + 1));
+    }
+    let tail = lines.iter().rev().find(|l| !l.trim().is_empty()).map(|l| l.trim());
+    let after_rule = rule.and_then(|(last, _)| lines[last + 1..].iter().find(|l| !l.trim().is_empty()));
+    if tail.is_some_and(|l| l.starts_with("? for shortcuts") || is_rule(l))
+        || after_rule.is_some_and(|l| possible_prompt(l))
+        || lines.iter().find(|l| !l.trim().is_empty()).is_some_and(|l| possible_prompt(l))
+    {
+        return "";
     }
     content
 }

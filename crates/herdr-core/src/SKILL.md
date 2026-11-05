@@ -222,7 +222,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   including risk-filtered choices, narrow layouts and wrapped controls.
   Built-in footer labels come from cmd 1.88.3; arbitrary mod-provided status
   text is outside that inventory. A complete composer box proves idle even
-  without its hint row; multiline drafts cannot supply status evidence.
+  without its hint row; normal, shell-input (`!`) and ASCII (`>`) composers
+  isolate multiline drafts. An apparent composer with unverifiable edges
+  supplies no folder-trust evidence.
   Pasting a divider exactly as wide as the terminal remains ambiguous.
   After recovery, an inferred root waits for a
   fresh foreground observation before screen evidence can confirm it; without

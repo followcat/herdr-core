@@ -84,3 +84,31 @@ fn remaining_builtin_labels_suppress_idle_including_narrow_cloud_waits() {
         expect(&composer(fake, "❯", "", 32), State::Idle);
     }
 }
+#[test]
+fn every_composer_glyph_isolates_trust_drafts_and_uncertain_boxes_fail_closed() {
+    let trust = "Do you trust the files in this folder?\n❯ 1. Yes, proceed\n  2. No, exit\n↑/↓ to navigate · enter to select · esc to exit";
+    for width in [80, 32] {
+        // Normal, shell-input and figures' non-Unicode pointer fallback.
+        // Plan/accept-edits affect hint text, not the input prefix.
+        for glyph in ["!", ">", "❯"] {
+            expect(&composer("Finished", glyph, trust, width), State::Idle);
+            expect(&composer(" ○ Working…", glyph, "", width), State::Working);
+        }
+        let screen = composer("Finished", "λ", trust, width);
+        expect(&screen, State::Unknown);
+        expect(&screen.replace("  ? for shortcuts\n", ""), State::Unknown);
+        for glyph in ["!", ">", "❯", "λ"] {
+            let screen = composer("Finished", glyph, trust, width);
+            let bar = "─".repeat(width);
+            let unequal = screen.replacen(&bar, &"─".repeat(width + 1), 1);
+            expect(&unequal, State::Unknown);
+            // A viewport can clip either edge of a tall draft.
+            let clipped_top = screen.replacen(&format!("Finished\n{bar}\n"), "", 1);
+            expect(&clipped_top, State::Unknown);
+            let clipped_bottom = screen.replace(&format!("\n{bar}\n  ? for shortcuts\n"), "");
+            expect(&clipped_bottom, State::Unknown);
+        }
+    }
+    expect(trust, State::Blocked);
+    expect(&fixture("cmd-trust-dialog.txt"), State::Blocked);
+}

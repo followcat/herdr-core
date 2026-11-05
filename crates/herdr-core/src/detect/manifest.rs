@@ -9,7 +9,7 @@ use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Highest `min_engine_version` a manifest may require.
-pub const ENGINE_VERSION: u32 = 5;
+pub const ENGINE_VERSION: u32 = 6;
 
 const MAX_RULES: usize = 128;
 const MAX_GATE_DEPTH: usize = 8;

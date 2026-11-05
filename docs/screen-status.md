@@ -133,8 +133,14 @@ selects the dialog or hint area below the last maximum-length divider.
 The older region names keep their existing behavior for other manifests. A pasted divider
 exactly as wide as the terminal remains ambiguous and is an accepted limit.
 Engine 5 adds `outside_full_width_prompt_box`: below the last full-width
-rule when a verified composer exists, otherwise the whole input. Folder
-trust reads only that region, so a pasted trust dialog is draft input.
+rule when a verified composer exists. Engine 6 recognizes the renderer's
+normal `❯`, shell-input `!` and ASCII `>` prefixes and returns no trust
+evidence if an apparent composer cannot be verified (clipped or unequal
+edges, an unknown prefix, or a remaining shortcuts hint). Without composer
+evidence, the whole input remains eligible. The bundled Command Code
+manifest requires engine 6 so older engines cannot apply its trust rule
+with the less restrictive fallback. Plan and accept-edits change hints,
+not the prefix. Folder trust reads only this region.
 A real unboxed TrustPrompt remains visible even without its top divider;
 wrapped title/control phrases are compared across whitespace.
 
