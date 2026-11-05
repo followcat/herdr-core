@@ -276,6 +276,13 @@ impl Core {
     pub(crate) fn screen_status_commit(&self, catalog: &Catalog, snap: Snap, detection: Detection) {
         let mut st = self.lock();
         let Some(t) = st.reg.terminals.get(&snap.id) else { return };
+        // Matching may have started before the recovery deadline and finished
+        // after it. Expiry wins under this same commit lock; the inferred
+        // mutation gate still preserves detached/frozen terminals.
+        if st.screen_status.get(&snap.id).and_then(|w| w.unconfirmed_until).is_some_and(|at| at <= Instant::now()) {
+            self.inferred_status(&mut st, snap.id, None);
+            return;
+        }
         let agent = t.foreground.as_ref().and_then(|f| f.agent);
         let now = Token {
             program: t.pid.map(|pid| (pid, t.program_started_ms)),

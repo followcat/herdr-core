@@ -140,7 +140,9 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   verdict withdraws the root quietly — this is the documented turn exception:
   the recovery withdrawal stamps the terminal, publishes a null status and
   persists, but counts **no turn** and produces no completion news (a
-  wherdr-style "unread turn" derivation stays false). A *confirmed* inferred
+  wherdr-style "unread turn" derivation stays false). The deadline is checked
+  again under the commit lock; a verdict collected before expiry cannot
+  confirm the root at or after its deadline. A *confirmed* inferred
   root withdrawn later — e.g. the foreground agent exits — does count a turn
   exactly like a native status clearing does. Disabled detection and an empty
   catalog keep an expiry-only worker alive, including across detached holders

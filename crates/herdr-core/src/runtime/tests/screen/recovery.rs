@@ -650,3 +650,38 @@ async fn restart_and_handover_freeze_detection() {
     drop(core);
     remove_root(&root);
 }
+
+#[cfg(unix)]
+#[tokio::test(start_paused = true)]
+async fn a_verdict_collected_before_recovery_expiry_cannot_confirm_after_it() {
+    for after in [Duration::ZERO, Duration::from_millis(10)] {
+        let (core, root) = test_core();
+        let catalog = test_detect_catalog();
+        let (id, _) = screen_agent(&core, "devin");
+        core.output(&mut core.lock(), id, b"WORKING NOW\r\n");
+        core.screen_status_pass(&catalog).await;
+        adopt_onto(&core, &root, id, "crash", b"WORKING NOW\r\n");
+        watch_sees(&core, id, agent("devin"));
+        let (turn, news, seq) = {
+            let st = core.lock();
+            let t = &st.reg.terminals[&id];
+            (t.turn, t.news, st.events.seq)
+        };
+        tokio::time::advance(crate::screen_status::RECONFIRM - Duration::from_millis(10)).await;
+        let verdicts = crate::screen_status::evaluate(core.screen_status_collect(&catalog));
+        assert_eq!(verdicts.len(), 1);
+        tokio::time::advance(Duration::from_millis(10) + after).await;
+        for (snap, verdict) in verdicts {
+            core.screen_status_commit(&catalog, snap, verdict);
+        }
+        {
+            let st = core.lock();
+            let t = &st.reg.terminals[&id];
+            assert!(t.status.is_none(), "a late verdict confirmed the root at +{after:?}");
+            assert_eq!((t.turn, t.news, st.events.seq), (turn, news, seq + 1), "one turn-free null");
+            assert!(st.screen_status[&id].unconfirmed_until.is_none());
+        }
+        drop(core);
+        remove_root(&root);
+    }
+}
