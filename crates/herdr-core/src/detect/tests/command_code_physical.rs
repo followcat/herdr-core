@@ -84,3 +84,29 @@ fn physical_rows_at_requested_widths() {
 fn physical_rows_at_every_width() {
     physical_sweep(true);
 }
+
+#[test]
+fn named_captures_do_not_duplicate_in_prefix_alternatives() {
+    let m = compile(
+        r#"
+        id = "named-prefix"
+        min_engine_version = 7
+        [[rules]]
+        id = "r"
+        state = "working"
+        prefix = {regex='^(?P<prefix>.+)$', min_chars=2, patterns=['(?P<tag>a)b[cd]', '(?P<part>x[yz]){2,3}']}
+    "#,
+    );
+    for (text, expected) in [
+        ("ab", State::Working),
+        ("abc", State::Working),
+        ("abd", State::Working),
+        ("xyx", State::Working),
+        ("xyxz", State::Working),
+        ("a", State::Unknown),
+        ("abe", State::Unknown),
+        ("xw", State::Unknown),
+    ] {
+        assert_eq!(detect(&m, &input(text)).state, expected, "{text}");
+    }
+}

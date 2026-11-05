@@ -161,7 +161,9 @@ single spaces. A complete label matches a configured regular language, or
 its clipped form must have at least `min_chars` Unicode characters and be
 a prefix of a member of that language. Patterns are case-sensitive unless
 they specify flags; positional assertions inside label patterns are
-rejected. The shape regex and both full/prefix programs for each label pattern
+rejected. Named and unnamed captures are transparent in derived prefix
+expressions; copying a subexpression cannot duplicate its capture name.
+The shape regex and both full/prefix programs for each label pattern
 count toward the existing matcher budgets and 512-character source limit. Derived prefix expressions
 are bounded to 16 KiB and compiled programs to 1 MiB per expression.
 
@@ -274,7 +276,7 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
 
 ## Fork version and updates
 
-This build is `0.1.17-followcat.6` — `0.1.17` plus a fork suffix. The suffix
+This build is `0.1.17-followcat.7` — `0.1.17` plus a fork suffix. The suffix
 works everywhere the version appears (`hc --version`, `server.status`,
 `hello`) and in `hc update --from <binary>`.
 

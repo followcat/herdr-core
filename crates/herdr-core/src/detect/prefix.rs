@@ -35,7 +35,7 @@ impl Prefix {
         let mut labels = Vec::new();
         for pattern in &raw.patterns {
             let hir = regex_syntax::Parser::new().parse(pattern).map_err(|e| e.to_string())?;
-            let partial = prefixes(&hir)?;
+            let partial = prefixes(&without_captures(&hir))?;
             labels.push((compile(&format!(r"\A(?:{pattern})\z"))?, compile(&format!(r"\A(?:{partial})\z"))?));
         }
         Ok(Self { shape, min_chars: raw.min_chars, labels })
@@ -48,6 +48,22 @@ impl Prefix {
             let long_enough = label.chars().count() >= self.min_chars;
             self.labels.iter().any(|(full, partial)| full.is_match(&label) || long_enough && partial.is_match(&label))
         })
+    }
+}
+
+// Captures do not change a label's language. Remove them before copying
+// exact subexpressions into multiple derived alternatives/repetitions.
+fn without_captures(hir: &Hir) -> Hir {
+    match hir.kind() {
+        HirKind::Capture(capture) => without_captures(&capture.sub),
+        HirKind::Concat(parts) => Hir::concat(parts.iter().map(without_captures).collect()),
+        HirKind::Alternation(parts) => Hir::alternation(parts.iter().map(without_captures).collect()),
+        HirKind::Repetition(repeat) => {
+            let mut repeat = repeat.clone();
+            repeat.sub = Box::new(without_captures(&repeat.sub));
+            Hir::repetition(repeat)
+        }
+        _ => hir.clone(),
     }
 }
 
