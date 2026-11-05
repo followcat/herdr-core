@@ -193,7 +193,14 @@ fn finish_reason(killed: bool, stopping: bool, host_shutdown: bool) -> &'static 
 
 impl Core {
     pub fn start(paths: Paths, info: CoreInfo) -> io::Result<Arc<Core>> {
-        let reg: Registry = read_state(&paths.state.join("terminals.json"))?;
+        let mut reg: Registry = read_state(&paths.state.join("terminals.json"))?;
+        // The agent identity is not serialized. Rehydrate from the saved
+        // foreground facts before locks, holder readers or workers exist.
+        for t in reg.terminals.values_mut() {
+            if let Some(fg) = t.foreground.as_mut() {
+                fg.agent = crate::detect::identify(fg);
+            }
+        }
         let docs_path = paths.state.join("docs.json");
         let docs = read_state(&docs_path).unwrap_or_else(|e| {
             eprintln!("core: cannot load documents, starting empty: {e}");
