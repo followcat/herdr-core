@@ -21,6 +21,8 @@ pub const FOCUS: u8 = 4;
 pub const FACTS: u8 = 5;
 /// Viewer → core: terminal-generated replies, not human activity.
 pub const AUTOMATIC_INPUT: u8 = 6;
+/// Viewer → core: negotiated human release bytes without size/display activity.
+pub const QUIET_HUMAN_RELEASE: u8 = 7;
 
 /// Credit a stream starts with before the viewer acknowledges anything.
 pub const WINDOW: usize = 256 * 1024;

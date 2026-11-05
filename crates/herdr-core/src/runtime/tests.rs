@@ -27,6 +27,7 @@ async fn keys_pressed_during_a_paste_follow_its_submit() {
             AttachRequest {
                 observe: false,
                 resize_notifications: false,
+                quiet_human_release: false,
                 history: 0,
                 size: (80, 24),
                 display: Display::default(),
@@ -47,7 +48,7 @@ async fn keys_pressed_during_a_paste_follow_its_submit() {
         .await;
         assert_eq!(frames.try_recv().unwrap(), proto::frame(proto::INPUT, id, b"abc"));
         assert!(frames.try_recv().is_err());
-        core.viewer_input(&person, channel, b"Z", false);
+        core.viewer_input(&person, channel, b"Z", crate::viewers::InputKind::Human);
         assert!(frames.try_recv().is_err(), "the person's keys must stay held");
         core.output(&mut core.lock(), id, b"\x1b]7501;state=done\x1b\\");
         tokio::time::advance(crate::input::PASTE_GAP).await;

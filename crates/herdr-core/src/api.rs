@@ -13,11 +13,23 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub const GENERATION: u32 = 1;
-pub const FEATURES: &[&str] =
-    &["framed", "attach", "events", "status", "shell", "resize_notifications", "automatic_input", "os_hostname"];
+pub const FEATURES: &[&str] = &[
+    "framed",
+    "attach",
+    "events",
+    "status",
+    "shell",
+    "resize_notifications",
+    "automatic_input",
+    "os_hostname",
+    "quiet_human_release",
+];
 pub const FINISHED_LINES: usize = 1000;
 /// A terminal's identity: fixed at start from whoever starts it.
 pub const IDENTITY_VARS: &[&str] = &["TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM"];
+
+mod viewers;
+use viewers::terminal_attach;
 
 mod identity;
 use identity::{hello, server_status};
@@ -364,42 +376,6 @@ async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcEr
     };
     core.flush_saved().await?;
     Ok(result)
-}
-
-async fn terminal_attach(core: Ctx<'_>, p: AttachParams) -> Result<AttachResult, RpcError> {
-    let Some(conn) = core.conn else {
-        return Err(RpcError::new(
-            "needs_framed",
-            "attach needs a framed connection",
-            "send hello with framed: true first, or use `hc attach`",
-        ));
-    };
-    let id = resolve(core, &p.terminal)?;
-    if p.caller.as_deref().and_then(crate::terminals::parse_id) == Some(id) {
-        return Err(RpcError::new(
-            "refused",
-            format!(
-                "{} is the terminal you are in: attached to itself, it would show its own output forever",
-                crate::terminals::address(id)
-            ),
-            "attach from another terminal",
-        ));
-    }
-    let req = crate::viewers::AttachRequest {
-        observe: p.observe,
-        resize_notifications: p.resize_notifications,
-        history: p.history,
-        size: (p.cols, p.rows),
-        display: p.display,
-        resumed: p.resumed,
-    };
-    let channel = core.attach(conn, id, req)?;
-    Ok(AttachResult {
-        channel,
-        terminal: Public(record(core, id)?),
-        resize_notifications: p.observe && p.resize_notifications,
-        automatic_input: true,
-    })
 }
 
 async fn terminal_send(core: Ctx<'_>, p: SendParams) -> Result<SendResult, RpcError> {

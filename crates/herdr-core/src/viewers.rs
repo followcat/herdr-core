@@ -32,6 +32,7 @@ pub struct Viewer {
     pub conn: Arc<Conn>,
     pub channel: u32,
     pub observe: bool,
+    quiet_human_release: bool,
     resize_notifications: bool,
     repaint_pending: bool,
     size: (u16, u16),
@@ -58,10 +59,24 @@ fn rgb(hex: &Option<String>) -> Option<Rgb> {
 pub struct AttachRequest {
     pub observe: bool,
     pub resize_notifications: bool,
+    pub quiet_human_release: bool,
     pub history: usize,
     pub size: (u16, u16),
     pub display: Display,
     pub resumed: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputKind {
+    Human,
+    Automatic,
+    QuietRelease,
+}
+
+impl InputKind {
+    pub(crate) fn human(self) -> bool {
+        self != Self::Automatic
+    }
 }
 
 impl Core {
@@ -84,6 +99,7 @@ impl Core {
             conn: conn.clone(),
             channel,
             observe: req.observe,
+            quiet_human_release: req.quiet_human_release && !req.observe,
             resize_notifications: req.observe && req.resize_notifications,
             repaint_pending: false,
             size: req.size,
@@ -316,15 +332,17 @@ impl Core {
         Some(id)
     }
 
-    pub fn viewer_input(&self, conn: &Arc<Conn>, channel: u32, bytes: &[u8], automatic: bool) {
+    pub fn viewer_input(&self, conn: &Arc<Conn>, channel: u32, bytes: &[u8], kind: InputKind) {
         let mut st = self.lock();
-        let id = if automatic {
-            Self::viewer(&mut st, conn, channel).filter(|(_, v)| !v.observe).map(|(id, _)| id)
-        } else {
+        let id = if kind == InputKind::Human {
             self.touch(&mut st, conn, channel, |_| {})
+        } else {
+            Self::viewer(&mut st, conn, channel)
+                .filter(|(_, v)| !v.observe && (kind != InputKind::QuietRelease || v.quiet_human_release))
+                .map(|(id, _)| id)
         };
         if let Some(id) = id {
-            let now = st.gates.entry(id).or_default().viewer(bytes, !automatic);
+            let now = st.gates.entry(id).or_default().viewer(bytes, kind.human());
             if let Some(link) = st.link(id) {
                 link.input(id, &now);
             }

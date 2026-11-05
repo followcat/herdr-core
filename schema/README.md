@@ -65,6 +65,7 @@ most 16 MiB.
 | 4 | FOCUS | viewer → core: 1 gained focus, 0 lost it |
 | 5 | FACTS | viewer → core: JSON display facts (`Display` in the schema) |
 | 6 | AUTOMATIC_INPUT | viewer → core: terminal-generated reply bytes, not human activity |
+| 7 | QUIET_HUMAN_RELEASE | negotiated viewer → core: human release bytes without size/display ownership |
 
 Channel 0 carries JSON-RPC both ways. Calls on it run side by side.
 
@@ -90,6 +91,17 @@ sending kind 6; absent/false means send DATA (legacy activity behavior). Old cor
 ignore unknown local frame kinds, so sending kind 6 without negotiation loses input.
 Relays preserve the tag and close a previously capable stream if support is lost
 on reconnect; attach again to negotiate the fallback. Untagged DATA is unchanged.
+
+The followcat fork advertises `quiet_human_release`. A client may request
+`quiet_human_release: true` on attach and send kind 7 only when both hello and that
+attach reply confirm support. Its raw bytes follow the human input gate and quiet
+period, including busy-input serialization, but never touch viewer activity or
+claim size/display ownership. Tag releases at the source; core does not parse them
+to establish whether they are releases. Arbitrary frame splits are valid. Observers
+and streams without the opt-in cannot send kind 7. Absent/false confirmation means
+send DATA, with its existing activity behavior, never AUTOMATIC_INPUT. At this
+implementation step relay attaches confirm false; end-to-end relay support follows
+in the separate relay-contract task. No dead-wire synthesis or replay is provided.
 Observers may opt in with `resize_notifications: true` on `terminal.attach`:
 the client must apply incoming RESIZE before consuming subsequent DATA.
 The reply confirms `resize_notifications: true` only when every core on the path

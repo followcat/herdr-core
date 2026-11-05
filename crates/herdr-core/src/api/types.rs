@@ -394,6 +394,10 @@ pub struct AttachParams {
     #[arg(skip)]
     #[serde(default)]
     pub resize_notifications: bool,
+    /// Request human release frames without claiming size/display ownership.
+    #[arg(skip)]
+    #[serde(default)]
+    pub quiet_human_release: bool,
     /// Scrollback lines to show first (main screen only).
     #[arg(long, default_value_t = 0)]
     #[serde(default)]
@@ -428,6 +432,9 @@ pub struct AttachResult {
     pub resize_notifications: bool,
     /// The entire attach path accepts AUTOMATIC_INPUT (kind 6). Absent means use DATA.
     pub automatic_input: bool,
+    /// True only for an opted-in, non-observing path accepting frame kind 7.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiet_human_release: Option<bool>,
 }
 
 #[derive(clap::Args, Serialize, Deserialize, JsonSchema, Default)]

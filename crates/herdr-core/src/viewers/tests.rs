@@ -34,6 +34,7 @@ fn resize_drags_serialize_nothing_without_observers_and_only_latest_when_stalled
     let request = |observe, resize_notifications| AttachRequest {
         observe,
         resize_notifications,
+        quiet_human_release: false,
         history: 0,
         size: (80, 24),
         display: Display::default(),

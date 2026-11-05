@@ -13,6 +13,13 @@
             "minimum": 0,
             "type": "integer"
           },
+          "quiet_human_release": {
+            "description": "True only for an opted-in, non-observing path accepting frame kind 7.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "resize_notifications": {
             "description": "True only when the entire path sends RESIZE before replacement paints.\nFalse or absent means the observer must track size changes separately.",
             "type": "boolean"
@@ -2374,6 +2381,16 @@
           "schema": {
             "default": false,
             "description": "Watch only: never type or resize.",
+            "type": "boolean"
+          }
+        },
+        {
+          "description": "Request human release frames without claiming size/display ownership.",
+          "name": "quiet_human_release",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "Request human release frames without claiming size/display ownership.",
             "type": "boolean"
           }
         },

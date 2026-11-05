@@ -82,6 +82,8 @@ pub(super) fn negotiate_resize(line: &Line, params: &mut Value) {
 /// Opens a viewer here on a terminal there: the stream channel there is
 /// relayed to a new channel on this connection, both ways.
 pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Value) -> Result<Value, RpcError> {
+    // Task 07 supports local streams; task 08 adds the end-to-end relay contract.
+    params["quiet_human_release"] = false.into();
     let line = line(core, m).await?;
     negotiate_resize(&line, &mut params);
     let here = conn.new_channel();
@@ -92,6 +94,7 @@ pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Valu
         .await
     {
         Ok(mut r) => {
+            r["quiet_human_release"] = false.into();
             let there = r["channel"].as_u64().unwrap_or_default() as u32;
             let enabled = params["observe"] == true
                 && params["resize_notifications"] == true
@@ -117,6 +120,9 @@ pub fn relay_in(core: &Core, conn: &Arc<Conn>, here: u32, kind: u8, payload: &[u
     let r = {
         let mut st = core.lock();
         let Some(r) = st.relayed.get_mut(&(conn_key(conn), here)) else { return false };
+        if kind == wire::QUIET_HUMAN_RELEASE {
+            return true; // not negotiated by this relay yet; never silently retag it
+        }
         // What a reattach after a dropped line brings back.
         if kind == wire::RESIZE && payload.len() == 4 {
             r.params["cols"] = u16::from_le_bytes([payload[0], payload[1]]).into();
