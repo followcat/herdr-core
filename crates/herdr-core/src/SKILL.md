@@ -243,8 +243,11 @@ paths start at your current folder. Prefer explicit paths for remote work.
   restarted event. Pending input/attach may be unavailable: retry after recovery.
 - Once work is accepted: `hc kill <t>`, then `hc rm <t>`. Only clean up
   terminals you started; `hc ls` includes your user's other live work.
-- `hc update` also restarts an older running core when the installed binary
-  is already current. JSON reports `restarted: true`; terminals keep running.
+- This followcat fork refuses plain `hc update` and `hc update --version`.
+  Use `hc update --from <binary>` to install another fork build and restart
+  the core; terminals keep running. JSON reports `restarted: true` when a
+  running core was restarted. Official release builds also let plain
+  `hc update` restart an older core when the installed binary is current.
   Managed installs must be updated with their package manager instead, and
   one in a folder you can't write (Unix) the way it was installed.
 - On macOS, privacy requests from terminal programs belong to Herdr Core,
@@ -258,14 +261,16 @@ paths start at your current folder. Prefer explicit paths for remote work.
   executable. Terminals created before this bundle
   upgrade may still have broken macOS privacy access: recreate those terminals;
   restarting only the core cannot repair their old holders. After an old updater
-  copies only the binary, run `hc update` to finish installing the bundle, even
-  if the version is already current. The app completes this during its update.
+  copies only the binary, run `hc update --from <app>` with the complete signed
+  app to finish installing the bundle, even if the version is already current.
+  The app completes this during its update.
   Startup never downloads updates. Previous bundles stay on disk while their
   cores or holders run; later installs reclaim unused previous bundles.
   Per-user installs use the bundle. Root/system destinations keep the independently
   signed standalone executable and their existing macOS privacy behavior.
   Machine installs also preserve bundles. A standalone sender cannot replace a
-  bundled remote core: run `hc update` there instead. Root remotes receive the
+  bundled remote core: run `hc update --from <app>` there with the complete
+  signed app instead. Root remotes receive the
   standalone release.
 - On macOS, desktop starts use a one-shot launchd job so quitting the launching
   app doesn't end terminals. SSH starts stay direct. If launchd fails, startup
@@ -275,5 +280,5 @@ paths start at your current folder. Prefer explicit paths for remote work.
   every terminal. Tests need their own `HC_SESSION` and scratch XDG paths.
 - Errors are `{error: {kind, message, hint}}` on stderr. Exit codes include
   3 not_found, 7 needs_target, 9 blocked, 10 status_mismatch, 11 finished.
-- Codex must run with `--no-daemon` (including templates), or its commands
+- Run Codex as `codex --no-daemon` (including templates), or its commands
   execute outside hc.

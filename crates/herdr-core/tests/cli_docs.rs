@@ -79,6 +79,9 @@ fn check_span(span: &str, reference: &Reference) -> Result<(), String> {
     if start.is_none() && !tokens.first().is_some_and(|w| w.starts_with("--") && *w != "---") {
         return Ok(());
     }
+    if start.is_some() && unquoted.contains(';') {
+        return unquoted.split(';').try_for_each(|command| check_span(command, reference));
+    }
     let mut path = String::new();
     let mut i = start.map_or(0, |i| i + 1);
     while i < tokens.len() {
@@ -145,7 +148,7 @@ fn help_reference_and_examples_are_current() {
         rendered,
         "docs/commands.md is stale; run just docs"
     );
-    let mut paths = vec![root.join("README.md")];
+    let mut paths = vec![root.join("README.md"), root.join("crates/herdr-core/src/SKILL.md")];
     paths.extend(
         std::fs::read_dir(root.join("docs"))
             .unwrap()
@@ -173,6 +176,8 @@ fn checker_catches_drift_without_treating_program_arguments_as_hc_flags() {
         "hc machine add --via 'ssh -p 2222 host' --name box",
         "hc run --bg pi --provider whatever",
         "hc exec --on box git diff --stat",
+        "hc wait tests; hc read tests --lines 40; hc rm tests",
+        "one host; hc does the rest",
         "hc file read --on box /srv/app/a.rs --limit 10",
         "hc send review 'check hc nonsense --not-an-hc-flag'",
         "--via",
@@ -185,6 +190,7 @@ fn checker_catches_drift_without_treating_program_arguments_as_hc_flags() {
     for bad in [
         "hc made-up",
         "hc machine nope",
+        "hc wait tests; hc read tests --not-a-real-flag",
         "hc run --bgg pi",
         "hc ls --via box",
         "hc --agent-help",
