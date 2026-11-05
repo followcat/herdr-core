@@ -14,6 +14,27 @@ fn composer(above: &str, draft: &str, width: usize) -> String {
     format!("{above}\n{bar}\n❯ {draft}\n{bar}\n  ? for shortcuts\n")
 }
 
+fn dialog(title: &str, question: &str, scoped: &str, risk: bool) -> String {
+    let choices = if risk {
+        "⚠ Destructive command. This is never auto-approved.\n❯ 1. Yes\n  2. No, tell Command Code what to do differently".into()
+    } else {
+        format!("❯ 1. Yes\n  2. {scoped}\n  3. No, tell Command Code what to do differently")
+    };
+    format!(
+        "{}\n{title}\n{question}\n\n{choices}\n\n↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions (Docs ↗)\n",
+        "─".repeat(80)
+    )
+}
+
+fn shell(risk: bool) -> String {
+    dialog(
+        "Execute Shell Command",
+        "Command Code needs to execute echo renderer.",
+        "Yes, don't ask again for `echo` commands in this project",
+        risk,
+    )
+}
+
 const VERBS: &[&str] = &[
     "Pondering…",
     "Contemplating…",
@@ -152,4 +173,14 @@ fn all_builtin_activity_labels_are_working_in_each_footer_mode() {
     for unknown in [" ○ lowercase…", " ○ Custom mod status", " ○ Arbitrary extension text"] {
         expect(&composer(unknown, "Ask your question...", 80), State::Idle, None);
     }
+}
+
+#[test]
+fn risk_filtered_choices_end_in_a_second_no_option() {
+    let screen = shell(true);
+    expect(&screen, State::Blocked, Some("permission"));
+    expect(&screen.replace("❯ 1. Yes", "  1. Yes").replace("  2. No", "❯ 2. No"), State::Blocked, Some("permission"));
+    // No must really be the final numbered choice, including when controls
+    // wrap. A later Yes is not a completed permission-choice block.
+    expect(&screen.replace("\n\n↑/↓", "\n  3. Yes\n\n↑/↓"), State::Unknown, None);
 }

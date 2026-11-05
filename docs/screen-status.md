@@ -151,7 +151,9 @@ bullets cannot count as a busy spinner.
 Tool permissions are selected below the last full-width rule. The
 `Command Code needs to` and `enter select` phrases match after whitespace
 joining across physical rows (equivalently, `\s+` between their words),
-while numbered Yes and No choices remain required as physical rows.
+while numbered Yes and final No choices remain required as physical rows.
+Risk-filtered dialogs remove scoped approvals and renumber No from 3 to 2;
+a later numbered option after No invalidates the choice block.
 
 ## Recovery
 
