@@ -220,3 +220,144 @@ fn partial_clone_signals_never_fetch_a_missing_upstream_object_or_launch_its_hel
         git(&s, &root, &["config", "--unset-all", key]);
     }
 }
+
+#[test]
+fn an_empty_protocol_allowlist_blocks_even_an_explicitly_allowed_ext_helper() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = session();
+    let sentinel = s.root.join("ran");
+    let helper = s.root.join("offline-helper");
+    fs::write(&helper, format!("#!/bin/sh\nprintf ran > '{}'\nexit 1\n", sentinel.display())).unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+    for restricted in [false, true] {
+        let mut command = s.program("git");
+        command.current_dir(&s.root).args([
+            "-c",
+            "protocol.allow=never",
+            "-c",
+            "protocol.ext.allow=always",
+            "ls-remote",
+            &format!("ext::{}", helper.display()),
+        ]);
+        if restricted {
+            command.env("GIT_ALLOW_PROTOCOL", "");
+        }
+        let output = command.output().unwrap();
+        assert!(!output.status.success());
+        assert_eq!(sentinel.exists(), !restricted, "empty means an allowlist with no protocols, not unset");
+        if restricted {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("transport 'ext' not allowed"));
+        } else {
+            fs::remove_file(&sentinel).unwrap();
+        }
+    }
+}
+
+#[test]
+fn every_git_child_keeps_transports_disabled_across_a_config_change() {
+    use std::os::unix::fs::PermissionsExt;
+    if let Some(home) = std::env::var_os("C3_PROTOCOL_RACE_ROOT") {
+        let home = std::path::PathBuf::from(home);
+        let repository = discover(&home.join("acme-shop"), None).unwrap().repository.unwrap();
+        let result = Probe::new(home, None).refresh(&repository, Instant::now());
+        assert!(result.is_err(), "changed identity cannot publish count results");
+        return;
+    }
+    let s = session();
+    let root = repo(&s);
+    let initial = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", "missing parent"]);
+    let missing = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", "upstream"]);
+    let upstream = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["update-ref", "refs/remotes/origin/main", &upstream]);
+    git(&s, &root, &["reset", "--quiet", "--hard", &initial]);
+    fs::remove_file(root.join(".git/objects").join(&missing[..2]).join(&missing[2..])).unwrap();
+    for (key, value) in [
+        ("remote.origin.url", "ssh://host-a/acme-shop"),
+        ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
+        ("branch.main.remote", "origin"),
+        ("branch.main.merge", "refs/heads/main"),
+    ] {
+        git(&s, &root, &["config", key, value]);
+    }
+    let sentinel = s.root.join("ext-ran");
+    let helper = s.root.join("offline-ext");
+    fs::write(&helper, format!("#!/bin/sh\nprintf ran > '{}'\nexit 1\n", sentinel.display())).unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+    let real =
+        std::env::split_paths(&std::env::var_os("PATH").unwrap()).map(|p| p.join("git")).find(|p| p.is_file()).unwrap();
+    let bin = s.root.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let shim = bin.join("git");
+    fs::write(
+        &shim,
+        format!(
+            r#"#!/bin/sh
+if [ "${{GIT_ALLOW_PROTOCOL+x}}" = x ] && [ "$GIT_ALLOW_PROTOCOL" = '' ]; then
+    printf 'blocked\n' >> '{home}/policy'
+else
+    printf 'open\n' >> '{home}/policy'
+fi
+for arg do
+    if [ "$arg" = rev-list ]; then
+        printf paused > '{home}/paused'
+        while [ ! -e '{home}/resume' ]; do /bin/sleep 0.002; done
+        break
+    fi
+done
+unset GIT_NO_LAZY_FETCH
+exec '{real}' "$@"
+"#,
+            home = s.root.display(),
+            real = real.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = s
+        .program(std::env::current_exe().unwrap())
+        .args(["--exact", "every_git_child_keeps_transports_disabled_across_a_config_change"])
+        .env("C3_PROTOCOL_RACE_ROOT", &s.root)
+        .env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()))
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let waiting = Instant::now();
+    while !s.root.join("paused").exists() {
+        if child.try_wait().unwrap().is_some() || waiting.elapsed() > Duration::from_secs(3) {
+            fs::write(s.root.join("resume"), "").unwrap();
+            let output = child.wait_with_output().unwrap();
+            panic!(
+                "probe did not reach rev-list: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    // The probe's cached config says no promisor; the count child sees this.
+    for (key, value) in [
+        ("remote.origin.promisor", "yes"),
+        ("remote.origin.url", &format!("ext::{}", helper.display())),
+        ("protocol.ext.allow", "always"),
+    ] {
+        git(&s, &root, &["config", key, value]);
+    }
+    fs::write(s.root.join("resume"), "").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!sentinel.exists(), "a config race must never launch the ext helper");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let policy = fs::read_to_string(s.root.join("policy")).unwrap();
+    assert!(policy.lines().count() >= 4, "config, symbolic HEAD, OIDs and count must all run");
+    assert!(
+        policy.lines().all(|line| line == "blocked"),
+        "every child needs the unconditional transport restriction: {policy}"
+    );
+}

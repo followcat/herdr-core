@@ -49,6 +49,9 @@ impl<'a> Budget<'a> {
             .env("GIT_OPTIONAL_LOCKS", "0")
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_NO_LAZY_FETCH", "1")
+            // An explicitly empty allowlist overrides even protocol.<name>.allow
+            // in config read after an earlier child's identity observation.
+            .env("GIT_ALLOW_PROTOCOL", "")
             .env("GIT_SSH_COMMAND", "false")
             .env("GIT_ASKPASS", "false")
             .args([

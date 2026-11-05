@@ -39,7 +39,9 @@ rev-list --left-right --count <validated head oid>...<validated upstream oid>
 
 The environment is cleared, then contains only PATH, the machine-side HOME/XDG_CONFIG_HOME,
 LC_ALL=C, GIT_CONFIG_NOSYSTEM=1, GIT_OPTIONAL_LOCKS=0, GIT_TERMINAL_PROMPT=0 and
-GIT_NO_LAZY_FETCH=1, GIT_SSH_COMMAND=false and GIT_ASKPASS=false.
+GIT_NO_LAZY_FETCH=1, GIT_SSH_COMMAND=false, GIT_ASKPASS=false and an explicitly empty
+GIT_ALLOW_PROTOCOL. Empty is a deny-all transport allowlist, not an unset variable; it overrides
+even `protocol.<name>.allow=always` read after an earlier child observed repository identity.
 There is no inherited GIT_CONFIG_COUNT/GIT_DIR/GIT_WORK_TREE/GIT_EXEC_PATH,
 shell, pager, fetch, status/diff, checkout, credential request or worktree scan. Config includes
 and conditional/worktree config are evaluated by Git; include origins/missing include targets
