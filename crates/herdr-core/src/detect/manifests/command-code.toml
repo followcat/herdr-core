@@ -5,7 +5,7 @@
 # Known gap: arbitrary mod-provided status text is not recognized. A mod
 # rendering the same bytes as built-in UI is inherently indistinguishable.
 id = "command-code"
-version = "2026.11.05.8"
+version = "2026.11.05.9"
 min_engine_version = 4
 updated_at = "2026-11-05T05:05:38Z"
 aliases = ["command_code"]

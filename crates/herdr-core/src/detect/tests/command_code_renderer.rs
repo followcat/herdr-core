@@ -192,3 +192,13 @@ fn subsecond_finished_reply_cannot_impersonate_a_bare_footer() {
     expect(&composer("⠶ Finished\n  · Working…", "Ask your question...", 32), State::Idle, None);
     expect(&composer(" · Working…", "Ask your question...", 32), State::Working, None);
 }
+
+#[test]
+fn short_rules_inside_command_or_explanation_do_not_cut_the_dialog() {
+    for screen in [
+        shell(false).replace("echo renderer.", "printf '\n──────────\nrenderer'."),
+        shell(false).replace("\n\n❯ 1.", "\nExplanation:\n──────────\nPrint a neutral word.\n\n❯ 1."),
+    ] {
+        expect(&screen, State::Blocked, Some("permission"));
+    }
+}

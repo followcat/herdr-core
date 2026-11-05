@@ -74,14 +74,19 @@ pub fn current_shell_block(content: &str) -> &str {
     &above[line_offset(above, at)..]
 }
 
-// Full-width boxes use the bottom pure rule's glyph count as the width.
-// This avoids guessing display-cell widths from arbitrary Unicode output.
+// The longest pure rule supplies the width even in a dialog with no box.
+// Its glyphs each occupy one cell; arbitrary text need not be measured.
+// On ties the last rule wins. Exactly full-width content stays ambiguous.
 fn last_full_width_rule(lines: &[&str]) -> Option<(usize, usize)> {
-    lines.iter().enumerate().rev().find_map(|(i, line)| {
-        let line = line.trim_end();
-        let width = line.chars().count();
-        (width >= 3 && line.chars().all(|c| c == '─')).then_some((i, width))
-    })
+    lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let line = line.trim_end();
+            let width = line.chars().count();
+            (width >= 3 && line.chars().all(|c| c == '─')).then_some((i, width))
+        })
+        .max_by_key(|&(i, width)| (width, i))
 }
 
 fn full_width_box(lines: &[&str]) -> Option<(usize, usize)> {
