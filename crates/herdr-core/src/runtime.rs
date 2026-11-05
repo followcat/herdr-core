@@ -692,9 +692,11 @@ impl Core {
                     }
                 }
                 proto::FOREGROUND_IS => {
-                    let pgid = proto::parse::<proto::Foreground>(&payload).map_or(-1, |f| f.pgid);
+                    let reply = proto::parse::<proto::Foreground>(&payload);
                     for tx in st.foreground.remove(&id).unwrap_or_default() {
-                        let _ = tx.send(pgid);
+                        if let Ok(foreground) = &reply {
+                            let _ = tx.send(foreground.pgid);
+                        }
                     }
                 }
                 proto::BYE => {

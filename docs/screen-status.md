@@ -144,6 +144,11 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   root withdrawn later — e.g. the foreground agent exits — does count a turn
   exactly like a native status clearing does. Detection disabled, an empty
   catalog, or an agent dropped from the catalog withdraws the same quiet way.
+- **Failed foreground lookups are unknown.** A missing link, timeout or
+  malformed reply keeps the last observed foreground and emits no foreground
+  or inferred-status event. An actual reply of “no foreground”, or a process
+  observed to have changed or exited, still withdraws the old owner's status.
+  The first real observation after adoption permits silent reconfirmation.
 - **A detached holder freezes its terminals.** Reader failure invalidates
   pending verdicts immediately. Until relink or finish, detection collects,
   commits, settles, confirms, expires and withdraws nothing on those terminals;

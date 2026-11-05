@@ -1,5 +1,7 @@
 use super::*;
 
+#[cfg(unix)]
+mod live_foreground;
 mod recovery;
 #[cfg(unix)]
 mod relink;

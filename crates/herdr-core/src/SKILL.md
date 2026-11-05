@@ -219,7 +219,8 @@ paths start at your current folder. Prefer explicit paths for remote work.
   get a screen-inferred status instead (`"source": "screen"` on the record);
   a native report always wins. After recovery, an inferred root waits for a
   fresh foreground observation before screen evidence can confirm it; without
-  confirmation it expires after 30 seconds without counting a turn.
+  confirmation it expires after 30 seconds without counting a turn. Failed
+  foreground lookups keep the last observation and emit no change event.
 - `blocked` means a person is needed (permission or a question): read the
   screen and ask your user. `send` refuses unless `--force`; don't use it to
   bypass a permission decision. `error`: read why, then send or kill.

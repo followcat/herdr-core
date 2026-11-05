@@ -172,7 +172,7 @@ impl Core {
             let live: Vec<u32> = self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect();
             for id in live {
                 let generation = self.lock().screen_status.get(&id).map_or(0, |w| w.generation);
-                let pgid = self.foreground(id).await;
+                let Some(pgid) = self.foreground(id).await else { continue };
                 let now = (pgid > 0).then(|| about(pgid)).flatten();
                 let mut st = self.lock();
                 // A response/OS read crossing detach or adoption cannot make

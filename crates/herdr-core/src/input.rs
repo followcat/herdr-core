@@ -520,7 +520,7 @@ impl Core {
             t.check_program()?;
             (t.reported, t.pid.unwrap_or(0) as i32)
         };
-        let before = if reported { -1 } else { self.foreground(id).await };
+        let before = if reported { None } else { self.foreground(id).await };
         let key = self
             .type_in(id, Duration::ZERO, false, |st, t| {
                 let default = if reported { "esc" } else { "ctrl+c" };
@@ -549,7 +549,7 @@ impl Core {
             if !live(&self.lock()) {
                 return Ok((Interrupted::Exited, key));
             }
-            if before != pid && self.foreground(id).await == pid {
+            if before.is_some_and(|before| before != pid) && self.foreground(id).await == Some(pid) {
                 return Ok((Interrupted::Stopped, key));
             }
             if Instant::now() >= deadline {
@@ -559,16 +559,17 @@ impl Core {
         }
     }
 
-    /// The process group in the foreground of terminal `id`, or -1.
-    pub(crate) async fn foreground(&self, id: u32) -> i32 {
+    /// A holder's observed foreground (including -1 for none), or unknown
+    /// when the link, reply or deadline cannot supply an observation.
+    pub(crate) async fn foreground(&self, id: u32) -> Option<i32> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         {
             let mut st = self.lock();
             st.foreground.entry(id).or_default().push(tx);
-            let Some(link) = st.link(id) else { return -1 };
+            let link = st.link(id)?;
             link.send(&proto::frame(proto::FOREGROUND, id, &[]));
         }
-        tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok).unwrap_or(-1)
+        tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok)
     }
 }
 

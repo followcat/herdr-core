@@ -132,7 +132,7 @@ async fn restarted_root(root: &std::path::Path, tail: &[u8]) -> (Arc<Core>, u32)
 }
 
 #[cfg(unix)]
-fn test_core_at(root: &std::path::Path) -> Arc<Core> {
+pub(super) fn test_core_at(root: &std::path::Path) -> Arc<Core> {
     let paths = Paths {
         state: root.join("state"),
         config: root.join("config.toml"),
