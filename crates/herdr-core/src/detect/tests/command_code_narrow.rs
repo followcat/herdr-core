@@ -125,3 +125,37 @@ capture!(capture_work66, "work66-04", Working, None);
 capture!(capture_work72, "work72-01", Working, None);
 capture!(capture_work80, "work80-01", Working, None);
 capture!(capture_done80, "work80-17", Idle, None);
+
+#[test]
+fn a_dialog_rewrapped_at_25_columns_is_permission_blocked() {
+    let source = fixture("cmd-tool-permission.txt");
+    let (_, dialog) = source.rsplit_once('─').unwrap();
+    // Word wrapping deliberately splits both phrases across rows. The
+    // original command/choices/control text is retained.
+    let mut rows = Vec::new();
+    for line in dialog.lines() {
+        let mut row = String::new();
+        for word in line.split_whitespace() {
+            if !row.is_empty() && row.chars().count() + 1 + word.chars().count() > 25 {
+                rows.push(std::mem::take(&mut row));
+            }
+            if !row.is_empty() {
+                row.push(' ');
+            }
+            row.push_str(word);
+        }
+        rows.push(row);
+    }
+    // 25 columns split the header only when aligned after its leading
+    // prefix; force the phrase boundary the reviewer also reproduced.
+    let wrapped = rows
+        .join("\n")
+        .replace("Command Code needs to", "Command Code needs\nto")
+        .replace("enter select", "enter\nselect");
+    expect(&format!("{}\n{wrapped}", "─".repeat(25)), State::Blocked, Some("permission"));
+    expect(&source.replace("3. No,", "3. Nope,"), State::Unknown, None);
+}
+
+capture!(capture_w32_dialog, "w32-02-dialog", Blocked, Some("permission"));
+capture!(capture_w45_dialog, "w45-10-dialog", Blocked, Some("permission"));
+capture!(capture_w60_dialog, "w60-02-dialog", Blocked, Some("permission"));

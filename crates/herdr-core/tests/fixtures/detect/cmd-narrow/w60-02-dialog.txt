@@ -1,0 +1,25 @@
+ █▀▀ █▀▄▀█ █▀▄   Command Code v1.88.3
+ █   █ ▀ █ █ █   models: glm-5.3-flash with max effort ·
+ ▀▀▀ ▀   ▀ ▀▀    taste-1
+                 /home/user/acme-shop
+
+❯ Run the shell command `mkdir w60-dir` in this
+  directory, then reply DONE.
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+
+────────────────────────────────────────────────────────────
+
+Execute Shell Command
+Command Code needs to execute mkdir w60-dir.
+
+Press [ctrl+e] to explain this command
+
+❯ 1. Yes
+  2. Yes, don't ask again for `mkdir` commands in this
+ project
+  3. No, tell Command Code what to do differently
+
+↑/↓ navigate · enter select · ctrl+e explain · Run cmd
+--yolo to bypass all permissions (Docs ↗)

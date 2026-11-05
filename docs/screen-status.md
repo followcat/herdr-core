@@ -140,6 +140,11 @@ remainder must sit directly after that activity line. The captured
 not admit arbitrary later transcript rows. `✻` summaries and `⠶` message
 bullets cannot count as a busy spinner.
 
+Tool permissions are selected below the last full-width rule. The
+`Command Code needs to` and `enter select` phrases match after whitespace
+joining across physical rows (equivalently, `\s+` between their words),
+while numbered Yes and No choices remain required as physical rows.
+
 ## Recovery
 
 A core restart (`hc server restart`, `hc update`, crash recovery, kept-terminal
@@ -206,7 +211,7 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
 
 ## Fork version and updates
 
-This build is `0.1.17-followcat.2` — `0.1.17` plus a fork suffix. The suffix
+This build is `0.1.17-followcat.3` — `0.1.17` plus a fork suffix. The suffix
 works everywhere the version appears (`hc --version`, `server.status`,
 `hello`) and in `hc update --from <binary>`.
 

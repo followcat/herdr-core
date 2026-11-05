@@ -44,3 +44,22 @@ Each import replaces the private working-directory path with
 All other bytes, including line breaks, indentation and horizontal rules,
 are preserved. Draft/control and retained-footer negatives are explicitly
 composed from these fixtures in the tests.
+
+## Command Code narrow captures (2026-11-05)
+
+All fourteen files under `cmd-narrow/` are full `hc read` screens of Command
+Code 1.88.3 held at the stated widths, from `C2-cmd-caps/narrow/`:
+
+| Files | Expected |
+|---|---|
+| `draft60.txt` | idle: multiline unsubmitted draft, including a short pasted divider; no hint row |
+| `work{32,45,60,66,72,80}-01.txt` (66 uses `work66-04.txt`) | working: bare, compact counter or full interrupt footer |
+| `w60-04.txt` | working: compact counter plus Tip |
+| `work32-04.txt`, `work45-03.txt`, `work80-17.txt` | idle: completed turns |
+| `w32-02-dialog.txt`, `w45-10-dialog.txt`, `w60-02-dialog.txt` | blocked / permission |
+
+Only the private working-directory path is replaced with
+`/home/user/acme-shop`; other bytes and physical rows are preserved. No
+user or host names occur. The tests separately label derived wraps at 25
+columns, wrapped full-footer/Tip cases, and multiline pasted drafts; these
+are not presented as live captures.

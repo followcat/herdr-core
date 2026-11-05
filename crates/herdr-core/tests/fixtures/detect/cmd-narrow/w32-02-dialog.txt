@@ -1,0 +1,40 @@
+  directory, then reply
+  DONE.
+
+✻Thought for 1[ctrl+o to ]
+ second        expand
+
+ SHELL  [mkdir w45-dir]
+ └ (no output)
+
+⠶ DONE
+
+❯ Run the shell command
+  `mkdir w32-dir` in this
+  directory, then reply
+  DONE.
+
+✻Thought for 1[ctrl+o to ]
+ second        expand
+
+
+────────────────────────────────
+
+Execute Shell Command
+Command Code needs to execute
+mkdir w32-dir.
+
+Press [ctrl+e] to explain this
+command
+
+❯ 1. Yes
+ 2. Yes, don't ask again for
+`mkdir` commands in this project
+
+  3. No, tell Command Code what
+ to do differently
+
+↑/↓ navigate · enter select ·
+ctrl+e explain · Run cmd --yolo
+to bypass all permissions (Docs
+↗)
