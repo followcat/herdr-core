@@ -222,7 +222,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   including risk-filtered choices, narrow layouts, wrapped controls and
   Unicode/ASCII selection pointers.
   Clipped built-in labels in all footer layouts, wrapped retry messages
-  and cloud waits also mean working. Clipped prefixes need six characters;
+  and cloud waits also mean working. VT soft wraps join only in the footer
+  checks; hard newlines and draft/reply boundaries stay separate. Clipped
+  prefixes need six characters;
   complete short labels remain valid.
   Built-in English footer labels come from cmd 1.88.3; arbitrary mod-provided status
   text is outside that inventory. A complete composer box proves idle even

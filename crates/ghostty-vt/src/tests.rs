@@ -222,3 +222,14 @@ fn grapheme_clustering_is_on_like_ghostty() {
     t.write(b"\x1bc");
     assert!(t.dec_mode(2027), "a reset keeps it on");
 }
+
+#[test]
+fn visible_logical_text_uses_wrap_facts_and_omits_wide_wrap_spacers() {
+    let mut t = Terminal::new(8, 5, 1 << 20);
+    t.write("1234567界Z\r\nabcdefgh\r\nQ".as_bytes());
+    assert!(t.screen_rows()[0].starts_with("1234567"));
+    assert_eq!(t.screen_logical_text().trim_end(), "1234567界Z\nabcdefgh\nQ");
+    // A visible selection never pulls text out of scrollback.
+    t.write(b"\r\n1\r\n2\r\n3\r\n4\r\n5");
+    assert_eq!(t.screen_logical_text().trim_end(), "1\n2\n3\n4\n5");
+}

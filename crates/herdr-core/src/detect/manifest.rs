@@ -10,7 +10,7 @@ use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Highest `min_engine_version` a manifest may require.
-pub const ENGINE_VERSION: u32 = 7;
+pub const ENGINE_VERSION: u32 = 8;
 
 const MAX_RULES: usize = 128;
 const MAX_GATE_DEPTH: usize = 8;
@@ -44,6 +44,7 @@ pub struct Manifest {
     pub id: String,
     pub aliases: Vec<String>,
     pub rules: Vec<Rule>,
+    needs_logical_lines: bool,
 }
 
 /// One rule: a gate evaluated in a named region.
@@ -64,8 +65,15 @@ pub struct Rule {
 impl Rule {
     /// The gate's verdict on this rule's own region of the input.
     pub fn matches(&self, input: &Input<'_>) -> bool {
+        self.matches_with_logical_screen(input, None)
+    }
+
+    /// The same gate with an optional VT-derived logical view of the screen.
+    pub fn matches_with_logical_screen(&self, input: &Input<'_>, logical: Option<&str>) -> bool {
+        let logical_input = Input { screen: logical.unwrap_or(input.screen), ..*input };
+        let input = if self.gate.logical_lines { &logical_input } else { input };
         let text = self.region.extract(input);
-        self.gate.matches(text, input)
+        self.gate.matches(text, input, logical)
     }
 }
 
@@ -74,6 +82,7 @@ impl Rule {
 #[derive(Debug, Default)]
 struct Gate {
     region: Option<Region>,
+    logical_lines: bool,
     all: Vec<Gate>,
     any: Vec<Gate>,
     not: Vec<Gate>,
@@ -84,15 +93,25 @@ struct Gate {
 }
 
 impl Gate {
-    fn matches(&self, text: &str, input: &Input<'_>) -> bool {
-        let text = self.region.map_or(text, |r| r.extract(input));
-        let lower = text.to_lowercase();
-        self.matches_lower(text, &lower, input)
+    fn needs_logical_lines(&self) -> bool {
+        self.logical_lines || self.all.iter().chain(&self.any).chain(&self.not).any(Gate::needs_logical_lines)
     }
 
-    fn matches_lower(&self, text: &str, lower: &str, input: &Input<'_>) -> bool {
+    fn matches(&self, text: &str, input: &Input<'_>, logical: Option<&str>) -> bool {
+        let logical_input = Input { screen: logical.unwrap_or(input.screen), ..*input };
+        let input = if self.logical_lines { &logical_input } else { input };
+        let text = self.region.map_or(text, |r| r.extract(input));
+        let lower = text.to_lowercase();
+        self.matches_lower(text, &lower, input, logical)
+    }
+
+    fn matches_lower(&self, text: &str, lower: &str, input: &Input<'_>, logical: Option<&str>) -> bool {
         let passes = |gate: &Gate| {
-            if gate.region.is_some() { gate.matches(text, input) } else { gate.matches_lower(text, lower, input) }
+            if gate.region.is_some() {
+                gate.matches(text, input, logical)
+            } else {
+                gate.matches_lower(text, lower, input, logical)
+            }
         };
         if self.prefix.as_ref().is_some_and(|p| !p.matches(text)) {
             return false;
@@ -149,6 +168,8 @@ struct RawRule {
     #[serde(default = "default_region")]
     region: String,
     #[serde(default)]
+    logical_lines: bool,
+    #[serde(default)]
     visible_idle: bool,
     #[serde(default)]
     visible_blocker: bool,
@@ -178,6 +199,7 @@ impl RawRule {
     fn gate(&self) -> RawGate {
         RawGate {
             region: None,
+            logical_lines: self.logical_lines,
             all: self.all.clone(),
             any: self.any.clone(),
             not: self.not.clone(),
@@ -196,6 +218,8 @@ struct RawGate {
     /// the parent's region. Rule-level regions remain on Rule itself.
     #[serde(default)]
     region: Option<String>,
+    #[serde(default)]
+    logical_lines: bool,
     #[serde(default)]
     all: Vec<RawGate>,
     #[serde(default)]
@@ -264,6 +288,9 @@ impl RawGate {
 }
 
 fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str, negative: bool) -> Result<(), String> {
+    if depth > 0 && gate.logical_lines && gate.region.is_none() {
+        return Err(format!("{ctx}: logical_lines on a nested gate needs an absolute region"));
+    }
     if depth > MAX_GATE_DEPTH {
         return Err(format!("{ctx}: gate depth over {MAX_GATE_DEPTH}"));
     }
@@ -310,6 +337,11 @@ fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str, n
 }
 
 impl Manifest {
+    /// Whether observation must also capture the VT's logical screen view.
+    pub fn needs_logical_lines(&self) -> bool {
+        self.needs_logical_lines
+    }
+
     /// Parse, validate and compile. Errors name the offending rule or field.
     pub fn compile(text: &str) -> Result<Manifest, String> {
         let raw: RawManifest = toml::from_str(text).map_err(|e| e.to_string())?;
@@ -332,7 +364,8 @@ impl Manifest {
         for raw in &raw.rules {
             rules.push(compile_rule(raw, &mut budget)?);
         }
-        Ok(Manifest { id: raw.id, aliases: raw.aliases, rules })
+        let needs_logical_lines = rules.iter().any(|r| r.gate.needs_logical_lines());
+        Ok(Manifest { id: raw.id, aliases: raw.aliases, rules, needs_logical_lines })
     }
 }
 
@@ -379,6 +412,7 @@ fn compile_gate(raw: &RawGate) -> Result<Gate, String> {
     };
     Ok(Gate {
         region: raw.region.as_deref().map(str::parse).transpose()?,
+        logical_lines: raw.logical_lines,
         all: raw.all.iter().map(compile_gate).collect::<Result<_, _>>()?,
         any: raw.any.iter().map(compile_gate).collect::<Result<_, _>>()?,
         not: raw.not.iter().map(compile_gate).collect::<Result<_, _>>()?,

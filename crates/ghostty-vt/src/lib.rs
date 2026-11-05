@@ -549,6 +549,15 @@ impl Terminal {
         out
     }
 
+    /// Only the visible screen, with Ghostty's soft wraps joined. Explicit
+    /// newlines stay separate; wide-character wrap spacers are omitted.
+    pub fn screen_logical_text(&self) -> String {
+        let (cols, rows) = self.size();
+        let last = (cols.saturating_sub(1), rows.saturating_sub(1) as u32);
+        let Some(sel) = self.select(ffi::POINT_ACTIVE, (0, 0), last) else { return String::new() };
+        String::from_utf8_lossy(&self.format_with(ffi::FORMAT_PLAIN, Some(&sel), false, true)).into_owned()
+    }
+
     /// Bytes of replies waiting in `take_responses`.
     pub fn pending_responses(&self) -> usize {
         self.hooks.responses.len()

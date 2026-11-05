@@ -9,7 +9,7 @@
 //! `reported` ends inference for the program's lifetime, and
 //! `Core::report_status` invalidates pending work on any native report.
 
-use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect};
+use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect_with_logical_screen};
 use crate::foreground::{Foreground, Key};
 use crate::runtime::{Core, State};
 use std::sync::Arc;
@@ -78,6 +78,7 @@ pub(crate) struct Snap {
     token: Token,
     manifest: Arc<Manifest>,
     rows: Vec<String>,
+    logical: Option<String>,
     title: String,
 }
 
@@ -286,6 +287,7 @@ impl Core {
         Some(Snap {
             id,
             token: Token { program, foreground, seq, size, manifest: Arc::as_ptr(&manifest) as usize, generation },
+            logical: manifest.needs_logical_lines().then(|| screen.screen_logical_text()),
             manifest,
             rows: screen.screen_rows(),
             title: screen.title(),
@@ -390,13 +392,18 @@ pub(crate) fn evaluate(snaps: Vec<Snap>) -> Vec<(Snap, Detection)> {
     snaps
         .into_iter()
         .map(|snap| {
-            let mut rows: Vec<&str> = snap.rows.iter().map(|row| row.trim_end()).collect();
-            while rows.last() == Some(&"") {
-                rows.pop();
-            }
-            let screen = rows.join("\n");
-            let detection = detect(&snap.manifest, &Input { screen: &screen, title: &snap.title, progress: "" });
+            let detection = detect_rows(&snap.manifest, &snap.rows, &snap.title, snap.logical.as_deref());
             (snap, detection)
         })
         .collect()
+}
+
+/// The detector's physical-row path, also used by VT-backed regression sweeps.
+pub(crate) fn detect_rows(manifest: &Manifest, rows: &[String], title: &str, logical: Option<&str>) -> Detection {
+    let mut rows: Vec<&str> = rows.iter().map(|row| row.trim_end()).collect();
+    while rows.last() == Some(&"") {
+        rows.pop();
+    }
+    let screen = rows.join("\n");
+    detect_with_logical_screen(manifest, &Input { screen: &screen, title, progress: "" }, logical)
 }

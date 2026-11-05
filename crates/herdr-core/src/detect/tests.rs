@@ -628,3 +628,8 @@ mod command_code_renderer;
 mod command_code_round4;
 #[path = "tests/command_code_width.rs"]
 mod command_code_width;
+
+#[path = "tests/command_code_physical.rs"]
+mod command_code_physical;
+#[path = "tests/logical_lines.rs"]
+mod logical_lines;

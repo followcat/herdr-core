@@ -34,10 +34,11 @@ for(const provider of [...providers,'OpenAI']) literal(`${provider} authenticati
 labels.push({text:'Connection dropped mid-response. Retrying... (2/3)',pattern:String.raw`Connection dropped mid-response\. Retrying\.\.\. \([0-9]+/[0-9]+\)`});
 labels.push({text:'Connection issue. Retrying... (attempt 2)',pattern:String.raw`Connection issue\. Retrying\.\.\. \(attempt [0-9]+\)`});
 for(const [stem,value] of [['Setting effort to ','high'],['Switching to ','Claude Opus 4.6']]) labels.push({text:`${stem}${value} in the cloud…`,pattern:escape(stem)+String.raw`[^\r\n]+ in the cloud…`});
-const widths=[18,24,32,38,42,45,60,68,72,80,120];
+const fullRange=process.argv.includes('--all-widths');
+const widths=fullRange?Array.from({length:105},(_,i)=>i+16):[18,24,32,38,42,45,60,68,72,80,120];
 const pointers=[...new Set([mainSymbols.pointer,fallbackSymbols.pointer])];
 if(pointers.join(',')!=='❯,>') throw new Error('figures pointer inventory changed');
-const modes=w=>[w>=72?'all':w>=42?'medium':'none',...(w===38?['medium']:w===68?['all']:[])];
+const modes=w=>[w>=72?'all':w>=42?'medium':'none',...(w>=38&&w<42?['medium']:w>=68&&w<72?['all']:[])];
 function status(text,width,mode,icon) {
  return h(Box,{width,height:1,paddingLeft:0,marginLeft:0},
   h(Box,{flexShrink:0},t(' '),t(`${icon} `),sh(text),t(' ')),
@@ -82,15 +83,25 @@ for(const width of widths) {
   rows.push({width,family:'completed',pointer,body:render(h(Box,{flexDirection:'column'},t('Finished reply'),t('─'.repeat(width)),t(`${pointer} Ask your question...`),t('─'.repeat(width)),t('  ? for shortcuts')),width)});
  }
 }
-const file='crates/herdr-core/tests/fixtures/detect/cmd-width-sweep.json';
-fs.writeFileSync(file,JSON.stringify({source:{version:'1.88.3',sha256:sha,dependencies:Object.fromEntries(['ink','react','figures'].map(name=>[name,JSON.parse(fs.readFileSync(`${root}/node_modules/${name}/package.json`,'utf8')).version]))},widths,pointers,labels,rows},null,2)+'\n');
-console.log(JSON.stringify({labels:labels.length,rows:rows.length,bytes:fs.statSync(file).size}));
+const source={version:'1.88.3',sha256:sha,dependencies:Object.fromEntries(['ink','react','figures'].map(name=>[name,JSON.parse(fs.readFileSync(`${root}/node_modules/${name}/package.json`,'utf8')).version]))};
+const file=`crates/herdr-core/tests/fixtures/detect/${fullRange?'cmd-physical-sweep':'cmd-width-sweep'}.json`;
+let output;
+if(fullRange) {
+ const bodies=[],index=new Map();
+ const packed=rows.map(row=>{
+  if(!index.has(row.body)) {index.set(row.body,bodies.length);bodies.push(row.body);}
+  return [row.width,row.family,row.pointer??null,index.get(row.body)];
+ });
+ output=JSON.stringify({source,widths,pointers,bodies,rows:packed})+'\n';
+} else output=JSON.stringify({source,widths,pointers,labels,rows},null,2)+'\n';
+fs.writeFileSync(file,output);
+console.log(JSON.stringify({labels:labels.length,rows:rows.length,bytes:Buffer.byteLength(output)}));
 if(process.argv.includes('--manifest')) {
  const file='crates/herdr-core/src/detect/manifests/command-code.toml';
  let source=fs.readFileSync(file,'utf8');
  const suffix=String.raw`(?:[ \t]+(?:\d+(?:\.\d+)?k?|esc to interrupt[^\r\n]*))?(?:\r?\n[ \t]*(?:esc to interrupt[^\r\n]*|•[ \t]+\d[^\r\n]*|\d+(?:\.\d+)?k?))?(?:\r?\n[ \t]*⎿[ \t]+Tip:\s+Use\s+shift\+tab\s+to\s+enable\s+accept\s+edits)*(?:\r?\n {3}Large\s+repo:\s+it\s+is\s+cloned\s+once\s+per\s+session,\s+and\s+reopening\s+is\s+fast\.)?\s*\z`;
  const shape=String.raw`(?m)^ ?[·☆⌘◇○✧][ \t]*(?P<prefix>\S[^\r\n]*?)`+suffix;
- const retry=String.raw`(?m)^(?P<prefix>\S[^\r\n]*(?:[ \t]*\r?\n\S[^\r\n]*)*)[ \t]*\s*\z`;
+ const retry=String.raw`(?m)^(?P<prefix>\S[^\r\n]*(?:[ \t]*\r?\n ?\S[^\r\n]*)*)[ \t]*\s*\z`;
  const patterns=[];let group=[];
  for(const {pattern} of labels) {
   if([...`(?:${[...group,pattern].join('|')})`].length>512) {patterns.push(`(?:${group.join('|')})`);group=[];}
@@ -109,9 +120,10 @@ if(process.argv.includes('--manifest')) {
  const entries=[spec(shape,patterns),spec(retry,[String.raw`Connection Issue\. Retrying \(attempt [0-9]+\)\.{0,3}`]),...cloud];
  let a=source.indexOf('any = [',source.indexOf('id = "turn_footer"')),b=source.indexOf('\n]\n',a)+2;
  source=source.slice(0,a)+'any = [\n'+entries.map(e=>'  '+e+',\n').join('')+']'+source.slice(b);
- a=source.indexOf('  { region = "above_full_width_prompt_box", any = [',source.indexOf('id = "composer_prompt"'));b=source.indexOf('\n  ] },',a)+7;
- source=source.slice(0,a)+'  { region = "above_full_width_prompt_box", any = [\n'+entries.map(e=>'    '+e+',\n').join('')+'  ] },'+source.slice(b);
- source=source.replace('min_engine_version = 6','min_engine_version = 7').replace('2026.11.05.14','2026.11.05.15');
+ a=source.indexOf('  { region = "above_full_width_prompt_box",',source.indexOf('id = "composer_prompt"'));b=source.indexOf('\n  ] },',a)+7;
+ source=source.slice(0,a)+'  { region = "above_full_width_prompt_box", logical_lines = true, any = [\n'+entries.map(e=>'    '+e+',\n').join('')+'  ] },'+source.slice(b);
+ source=source.replace('min_engine_version = 7','min_engine_version = 8').replace('2026.11.05.14','2026.11.05.15');
+ source=source.replace('region = \"above_full_width_prompt_box\"\nvisible_working', 'region = \"above_full_width_prompt_box\"\nlogical_lines = true\nvisible_working');
  fs.writeFileSync(file,source);
  console.log(JSON.stringify({patterns:patterns.length,shape_chars:[...shape].length,manifest_bytes:Buffer.byteLength(source)}));
 }

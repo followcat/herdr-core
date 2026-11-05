@@ -138,11 +138,22 @@ normal `❯`, shell-input `!` and ASCII `>` prefixes and returns no trust
 evidence if an apparent composer cannot be verified (clipped or unequal
 edges, an unknown prefix, or a remaining shortcuts hint). Without composer
 evidence, the whole input remains eligible. The bundled Command Code
-manifest requires engine 7, including the prefix matcher below; older
+manifest requires engine 8, including logical-line selection below; older
 engines reject it. Plan and accept-edits change hints,
 not the prefix. Folder trust reads only this region.
 A real unboxed TrustPrompt remains visible even without its top divider;
 wrapped title/control phrases are compared across whitespace.
+
+Engine 8 adds `logical_lines = true` to a rule or a nested gate with an
+absolute `region`. It opts that subtree into Ghostty's logical view of the
+same visible screen: soft-wrapped cells join without an added space,
+explicit newlines stay separate, and wide-character wrap spacers disappear.
+Other gates use the physical view, and descendants inherit their selected
+view. Without VT metadata, no soft-wrap joining occurs. Both views retain
+the input-size bound. Command Code opts in only for its footer and the
+corresponding idle exclusion; its composer and permission checks stay
+physical. The runtime captures the extra view only for opted-in manifests,
+under the same snapshot lock and staleness token.
 
 Engine 7 adds a `prefix` matcher: `{ regex, min_chars, patterns }`. The
 layout regex must name a `prefix` capture; its whitespace is folded to
@@ -182,7 +193,7 @@ two-space `· Working…` reply is idle. The captured `Use shift+tab to enable
 accept edits` Tip can wrap between words; it does not admit arbitrary later
 transcript rows. The built-in cloud clone hint is likewise matched as fixed
 text. RetryMessage has its own column-zero text, which may wrap only
-between its fixed words onto the immediately following unindented row;
+between its fixed words onto the immediately following row, with zero or one leading space;
 blank or unrelated intervening rows do not count. `✻` summaries
 and `⠶` message bullets cannot count as a busy spinner.
 
@@ -311,3 +322,10 @@ Install it by copying the packaged `herdr-core` to `~/.local/bin/` (with an
 - Inferred statuses are JSON facts only: `paint_state` must never replay
   them to viewers as OSC 7501, so a viewer cannot tell its program
   "reported" them.
+
+The physical-row regression sweep feeds every isolated Ink frame through
+Ghostty and the runtime's row normalization before detection. Both the 11
+requested widths and every integer width 16–120 run by default. Logical
+joining uses Ghostty's wrap flags, never a row-length guess. Known hard
+Ink word wraps still need their explicit layout grammar; in particular
+RetryMessage can leave one leading space at an exact-width word boundary.

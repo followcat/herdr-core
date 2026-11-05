@@ -774,3 +774,5 @@ fn nothing_under_the_state_lock_identifies() {
     let src = include_str!("../../screen_status.rs");
     assert!(!src.contains("identify"), "screen_status must not call identify under Core.state");
 }
+
+mod logical;

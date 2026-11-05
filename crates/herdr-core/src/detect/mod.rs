@@ -80,15 +80,22 @@ const NONE: Detection = Detection {
 /// the rule written first in the file. No match — or input over
 /// [`MAX_INPUT_BYTES`] — is [`NONE`].
 pub fn detect(manifest: &Manifest, input: &Input<'_>) -> Detection {
+    detect_with_logical_screen(manifest, input, None)
+}
+
+/// Evaluate with a logical screen produced by the same VT snapshot. Only
+/// opted-in gates use it. Without that view, rows remain hard-separated.
+pub fn detect_with_logical_screen(manifest: &Manifest, input: &Input<'_>, logical: Option<&str>) -> Detection {
     if input.screen.len() > MAX_INPUT_BYTES
         || input.title.len() > MAX_INPUT_BYTES
         || input.progress.len() > MAX_INPUT_BYTES
+        || logical.is_some_and(|s| s.len() > MAX_INPUT_BYTES)
     {
         return NONE;
     }
     let mut best: Option<&manifest::Rule> = None;
     for rule in &manifest.rules {
-        if !rule.matches(input) {
+        if !rule.matches_with_logical_screen(input, logical) {
             continue;
         }
         match best {
