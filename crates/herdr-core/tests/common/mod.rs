@@ -146,7 +146,8 @@ impl Session {
     }
 
     pub fn socket(&self) -> PathBuf {
-        self.root.join("run/herdr-core/test.sock")
+        let session = self.env.iter().rev().find(|(key, _)| key == "HC_SESSION").map_or("test", |(_, value)| value);
+        self.root.join(format!("run/herdr-core/{session}.sock"))
     }
 
     pub fn connect_ok(&self) -> bool {

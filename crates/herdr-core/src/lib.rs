@@ -24,6 +24,8 @@ pub mod put;
 pub mod relay;
 pub mod releases;
 pub mod remote;
+#[doc(hidden)]
+pub mod repository;
 pub mod rpc;
 pub mod runtime;
 pub mod screen_status;
