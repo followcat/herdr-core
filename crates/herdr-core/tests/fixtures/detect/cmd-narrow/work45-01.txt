@@ -1,0 +1,40 @@
+  application-level caches (like Java's
+  or Chrome's DNS caches) add another
+  layer above that.
+
+  Each cached record carries a TTL (time
+  to live), set by the authoritative
+  zone. The resolver decrements TTLs as
+  time passes, and once a record's TTL
+  expires it must be re-fetched from the
+  authoritative source. TTLs trade
+  freshness against load: short TTLs
+  (30–300s) propagate changes quickly but
+   increase query volume; long TTLs
+  (hours to days) reduce traffic but mean
+   stale records linger after changes
+  like server migrations.
+
+  A subtle but important detail is
+  negative caching: RFC 2308 says
+  resolvers should also cache NXDOMAIN
+  and NODATA responses so that lookups
+  for nonexistent names don't hammer
+  authoritative servers.
+
+  Caching can cause real-world headaches:
+   DNS-based failover is slowed by stale
+  caches, CDN steering can serve a user a
+   far-off node, and misconfigured
+  resolvers that ignore TTLs cause broken
+   deployments. Operators mitigate this
+  by lowering TTLs before planned
+  changes, flushing caches explicitly
+  (ipconfig /flushdns, res
+
+
+ ✧ Processing…  317
+─────────────────────────────────────────────
+❯ Ask your question...
+─────────────────────────────────────────────
+  ? for shortcuts

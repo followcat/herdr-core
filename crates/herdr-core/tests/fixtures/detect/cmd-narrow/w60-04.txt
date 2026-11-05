@@ -1,0 +1,19 @@
+ █▀▀ █▀▄▀█ █▀▄   Command Code v1.88.3
+ █   █ ▀ █ █ █   models: glm-5.3-flash with max effort ·
+ ▀▀▀ ▀   ▀ ▀▀    taste-1
+                 /home/user/acme-shop
+
+❯ Run the shell command `mkdir w60-dir` in this
+  directory, then reply DONE.
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+ SHELL  [mkdir w60-dir]
+ └ (no output)
+
+ ⌘ Weaving…  27
+  ⎿  Tip: Use shift+tab to enable accept edits
+────────────────────────────────────────────────────────────
+❯ Ask your question...
+────────────────────────────────────────────────────────────
+  ? for shortcuts · taste off

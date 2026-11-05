@@ -1,0 +1,40 @@
+  visited at all, so collection cost is proportional to live
+   data rather than heap size, and compaction — zero
+  fragmentation, perfectly cache-friendly allocation — falls
+   out for free. The bill is memory: half the heap is always
+   reserved, and long-lived objects get copied on every
+  pass.
+
+  The 1970s turned to the pause problem. Baker's incremental
+   collector (1978) interleaved small collection steps with
+  program execution using read barriers; Dijkstra's
+  on-the-fly collector (1978) established the tri-color
+  abstraction — white, gray, black — that still frames every
+   concurrent collector, and Steele explored multiprocessing
+   collection even earlier. These designs were delicate, but
+   they proved the crucial point: a collector's work can
+  overlap with the program's.
+
+  Then came the idea that made GC commercially boring in the
+   best way: generations. Lieberman and Hewitt (1983)
+  formalized the weak generational hypothesis — most objects
+   die young — and David Ungar (1984) built it into
+  Smalltalk as generation scavenging. New objects live in a
+  small nursery collected cheaply and often; survivors are
+  promoted to an old generation collected rarely. Write
+  barriers and remembered sets track the rare old-to-young
+  pointers. Because it matched actual allocation behavior,
+  collection became fast in practice, not just in theory.
+
+  Mainstream adoption followed. Java shipped generational
+  collectors in 1996, then grew a zoo: parallel throughput
+  collectors, the mostly-concurrent CMS in the early 2000s,
+  and G1, which sliced the heap into regions and collected
+  the least-valuable ones first to honor a pause goal
+  (default from JDK 9). .
+
+ ○ Evaluating…  1.1k
+──────────────────────────────────────────────────────────────────
+❯ Ask your question...
+──────────────────────────────────────────────────────────────────
+  ? for shortcuts · taste off

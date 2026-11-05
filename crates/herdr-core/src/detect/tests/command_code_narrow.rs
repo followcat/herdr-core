@@ -4,6 +4,10 @@ fn expect(screen: &str, state: State, kind: Option<&str>) {
     let m = bundled("command-code").unwrap();
     let d = detect(&m, &input(screen));
     assert_eq!((d.state, d.kind), (state, kind), "rule: {:?}", d.rule);
+    if state == State::Working {
+        let composer = m.rules.iter().find(|r| r.id == "composer_prompt").unwrap();
+        assert!(!composer.matches(&input(screen)), "idle cannot match beneath a live footer");
+    }
 }
 
 fn draft(text: &str) -> String {
@@ -82,3 +86,42 @@ macro_rules! capture {
 }
 
 capture!(capture_draft60, "draft60", Idle, None);
+
+#[test]
+fn wrapped_full_footers_and_tip_continuations_are_working() {
+    let compact = fixture("cmd-narrow/work32-01.txt");
+    for replacement in [
+        "✻ Worked for 6s",
+        "✻ Thought for 6s",
+        "⠶ Formulating…",
+        " ○ lowercase…",
+        " ☆ Formulating…\nnot a footer continuation",
+    ] {
+        expect(&compact.replace(" ☆ Formulating…", replacement), State::Idle, None);
+    }
+    let screen = fixture("cmd-after-yes-5.txt");
+    let footer = " ○ Pondering…  esc to interrupt • 2m 55s • ↓ 78";
+    for wrapped in [
+        " ○ Pondering…\n  esc to interrupt • 2m 55s • ↓ 78",
+        " ○ Pondering…  esc to interrupt\n  • 2m 55s • ↓ 78",
+        " ○ Pondering…  esc to interrupt • 2m 55s • ↓\n  78",
+    ] {
+        expect(&screen.replace(footer, wrapped), State::Working, None);
+    }
+    expect(
+        &screen.replace("Tip: Use shift+tab to enable accept edits", "Tip: Use shift+tab to\n  enable accept edits"),
+        State::Working,
+        None,
+    );
+}
+
+capture!(capture_w60_tip, "w60-04", Working, None);
+capture!(capture_work32, "work32-01", Working, None);
+capture!(capture_done32, "work32-04", Idle, None);
+capture!(capture_work45, "work45-01", Working, None);
+capture!(capture_done45, "work45-03", Idle, None);
+capture!(capture_work60, "work60-01", Working, None);
+capture!(capture_work66, "work66-04", Working, None);
+capture!(capture_work72, "work72-01", Working, None);
+capture!(capture_work80, "work80-01", Working, None);
+capture!(capture_done80, "work80-17", Idle, None);

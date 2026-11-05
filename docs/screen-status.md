@@ -131,6 +131,15 @@ selects the dialog or hint area below that bottom divider. The older region
 names keep their existing behavior for other manifests. A pasted divider
 exactly as wide as the terminal remains ambiguous and is an accepted limit.
 
+Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
+capitalized activity verb ending in `…`, and either no suffix, a compact
+counter (including decimals and `k`), or full interrupt controls. The legacy
+captured `Shell command allowed` label also remains supported. A full-footer
+remainder must sit directly after that activity line. The captured
+`Use shift+tab to enable accept edits` Tip can wrap between words; it does
+not admit arbitrary later transcript rows. `✻` summaries and `⠶` message
+bullets cannot count as a busy spinner.
+
 ## Recovery
 
 A core restart (`hc server restart`, `hc update`, crash recovery, kept-terminal

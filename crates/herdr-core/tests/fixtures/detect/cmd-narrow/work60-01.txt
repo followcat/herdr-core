@@ -1,0 +1,40 @@
+  The newest chapter is the kernel-to-userspace
+  boundary: QUIC reimplements congestion control in
+  userspace, letting applications like BBR or CUBIC
+  with new loss detection ship independently of OS
+  kernels, and IEEE 802.11's aggregation and 5G's
+  buffer behavior keep producing tailored variants
+  like BBRv2, Copa, and Swift.
+
+  DONE
+
+❯ Without using any tools, think it through, then
+  write about 700 words on how TCP congestion control
+  evolved. End with DONE.
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+⠶ Early TCP had no notion of congestion at all. The
+  protocol treated a lost packet as evidence of a
+  transmission error on a link, retransmitted it, and
+  moved on. On the small, lightly loaded networks of
+  the early 1980s that was tolerable. On the rapidly
+  growing internet it was catastrophic. In October 1986
+   the link between Lawrence Berkeley Lab and UC
+  Berkeley collapsed from 32 Kbps to roughly 40 bps — a
+   thousandfold drop — and the mechanism was clear
+  after the fact: overload caused buffer overflow and
+  drops, drops caused aggressive timer-based
+  retransmissions, and those retransmissions deepened
+  the overload. The network could saturate itself with
+  duplicate traffic while delivering almost nothing.
+
+  Van Jacobson's 1988 paper "Congestion Avoidance and
+  Control" reframed loss on a wired network as a
+  congestion signal, and introduced the algorithms —
+
+ ☆ Resolving…  119
+────────────────────────────────────────────────────────────
+❯ Ask your question...
+────────────────────────────────────────────────────────────
+  ? for shortcuts · taste off

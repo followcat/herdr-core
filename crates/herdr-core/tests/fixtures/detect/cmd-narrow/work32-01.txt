@@ -1,0 +1,40 @@
+  equal shares. AIMD is both
+  a stability mechanism and a
+   fairness mechanism, which
+  is why every later design
+  still ends with a
+  multiplicative backoff.
+
+  Reno's weakness was
+  multiple losses. One
+  retransmission per RTT,
+  with duplicate-ACK counters
+   that stall after two
+  losses in a window, sent
+  many connections into
+  timeouts and slow-start
+  restarts. NewReno (1996)
+  patched this within the
+  vanilla ACK stream,
+  retransmitting through
+  several losses per window.
+  SACK (RFC 2018) solved it
+  with information instead of
+   guessing: the receiver
+  lists the out-of-order
+  blocks it holds, and the
+  sender repairs precisely,
+  with FACK and later RACK
+  sharpening the
+  loss-detection logic.
+
+  By the late nineties a
+  deeper limitation appeared.
+   AIMD's halve-and-climb
+  response
+
+ ☆ Formulating…
+────────────────────────────────
+❯ Ask your question...
+────────────────────────────────
+  ? for shortcuts

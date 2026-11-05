@@ -3,7 +3,7 @@
 # Command Code 1.88.2–1.88.3: turn footers above the composer and tool
 # permission dialogs are captured alongside trust, draft and idle screens.
 id = "command-code"
-version = "2026.11.05.3"
+version = "2026.11.05.4"
 min_engine_version = 4
 updated_at = "2026-11-05T00:00:00Z"
 aliases = ["command_code"]
@@ -35,15 +35,17 @@ contains = ["command code needs to", "enter select"]
 line_regex = ['^\s*❯?\s*1\.\s+(?i:yes)\b']
 
 # The live turn footer ends the transcript above the composer, optionally
-# followed by a Tip line. Require that tail position so an older retained
-# footer cannot claim a completed reply. Spinner and activity labels vary.
+# followed by the captured Tip, including wrapped words. The six observed
+# spinners exclude summary/message markers. Compact counters and bare verbs
+# share this shape; a wrapped full-footer remainder must immediately follow
+# the activity line. Older footers followed by a reply cannot claim working.
 [[rules]]
 id = "turn_footer"
 state = "working"
 priority = 200
 region = "above_full_width_prompt_box"
 visible_working = true
-regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z']
+regex = ['(?m)^[ \t]+[·☆⌘◇○✧][ \t]+(?:[A-Z][a-z]*…|Shell command allowed)(?:[ \t]{2,}(?:\d+(?:\.\d+)?k?|esc to interrupt[^\r\n]*))?(?:\r?\n[ \t]*(?:esc to interrupt[^\r\n]*|•[ \t]+\d[^\r\n]*|\d+(?:\.\d+)?k?))?(?:\r?\n[ \t]*⎿[ \t]+Tip:\s+Use\s+shift\+tab\s+to\s+enable\s+accept\s+edits)*\s*\z']
 
 # The box proves readiness even when a tall draft hides the hint row.
 # Only the live footer above it may suppress idle; draft contents cannot.
@@ -55,7 +57,7 @@ region = "full_width_prompt_box_body"
 visible_idle = true
 line_regex = ['^\s*❯(?:\s|$)']
 not = [
-  { region = "above_full_width_prompt_box", regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z'] },
+  { region = "above_full_width_prompt_box", regex = ['(?m)^[ \t]+[·☆⌘◇○✧][ \t]+(?:[A-Z][a-z]*…|Shell command allowed)(?:[ \t]{2,}(?:\d+(?:\.\d+)?k?|esc to interrupt[^\r\n]*))?(?:\r?\n[ \t]*(?:esc to interrupt[^\r\n]*|•[ \t]+\d[^\r\n]*|\d+(?:\.\d+)?k?))?(?:\r?\n[ \t]*⎿[ \t]+Tip:\s+Use\s+shift\+tab\s+to\s+enable\s+accept\s+edits)*\s*\z'] },
 ]
 
 # The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows

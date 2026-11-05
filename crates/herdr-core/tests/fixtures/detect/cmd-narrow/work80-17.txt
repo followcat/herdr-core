@@ -1,0 +1,40 @@
+  detection further.
+
+  By the late 1990s it was clear that AIMD's halving behavior made
+  classic TCP unable to fill high bandwidth-delay product paths: a flow
+  at 10 Gbps over 100ms drops to ~4 Mbps after one loss, and would need
+  tens of thousands of consecutive loss-free RTTs to climb back. That
+  spawned a decade of high-speed proposals — HighSpeed TCP, BIC, and
+  finally CUBIC, which replaced the linear increase with a cubic
+  function of time since the last congestion event, probing aggressively
+   right after a loss and cautiously as it approaches the previous
+  maximum. CUBIC became the default on Linux in 2006 and remains the
+  standard Linux stack, and it also underlies most non-Apple platforms'
+  transports today.
+
+  A parallel line of work questioned the loss-as-congestion premise
+  itself, especially once wireless links and shallow-buffer datacenters
+  entered the picture. In those environments loss often means bit errors
+   or buffer pressure, not a saturated bottleneck. TCP Vegas, Westwood,
+  and Compound TCP tried delay- or hybrid-based signals. The most
+  influential result was BBR (Google, 2016), which models the path's
+  bottleneck bandwidth and minimum RTT directly and paces traffic to sit
+   at the BDP without filling buffers. BBR dramatically improves
+  throughput and latency on lossy links (it initially caused fairness
+  and bufferbloat controversies that BBRv2 and v3 address), and it now
+  carries a large fraction of Google and Netflix traffic.
+
+  The newest chapter is the kernel-to-userspace boundary: QUIC
+  reimplements congestion control in userspace, letting applications
+  like BBR or CUBIC with new loss detection ship independently of OS
+  kernels, and IEEE 802.11's aggregation and 5G's buffer behavior keep
+  producing tailored variants like BBRv2, Copa, and Swift.
+
+  DONE
+
+✻ Worked for 8s
+
+────────────────────────────────────────────────────────────────────────────────
+❯ Ask your question...
+────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts · taste off
