@@ -18,13 +18,21 @@ impl Line {
     /// A reply to one of our calls: to whoever waits for it.
     pub(super) fn take_reply(&self, mut reply: Value) {
         let Some((waiter, sink)) = reply["id"].as_u64().and_then(|id| lock(&self.pending).remove(&id)) else { return };
-        if let (Some((sink, require_resize)), Some(there)) = (sink, reply["result"]["channel"].as_u64()) {
-            if require_resize && reply["result"]["resize_notifications"] != true {
+        if let (Some((sink, required)), Some(there)) = (sink, reply["result"]["channel"].as_u64()) {
+            let lost = if required.resize && reply["result"]["resize_notifications"] != true {
+                Some(RESIZE_LOST)
+            } else if required.quiet
+                && (!self.features.iter().any(|f| f == "quiet_human_release")
+                    || reply["result"]["quiet_human_release"] != true)
+            {
+                Some(QUIET_LOST)
+            } else {
+                None
+            };
+            if let Some(lost) = lost {
                 let _ = self.frames.send(wire::encode(there as u32, wire::CLOSE, b""));
-                reply = crate::rpc::response(
-                    reply["id"].clone(),
-                    Err(RpcError::new("unavailable", RESIZE_LOST, "attach again")),
-                );
+                reply =
+                    crate::rpc::response(reply["id"].clone(), Err(RpcError::new("unavailable", lost, "attach again")));
             } else {
                 lock(&self.streams).insert(there as u32, sink);
             }
@@ -54,7 +62,7 @@ impl Line {
         machine: &str,
         method: &str,
         params: Value,
-        sink: Option<(Sink, bool)>,
+        sink: Option<(Sink, Required)>,
         deadline: Duration,
     ) -> Result<Value, RpcError> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);

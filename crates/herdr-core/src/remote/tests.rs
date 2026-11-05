@@ -52,6 +52,7 @@ async fn automatic_input_survives_relays_but_not_a_capability_downgrade() {
             (conn_key(&conn), 7),
             Relayed {
                 automatic_input: true,
+                quiet_human_release: false,
                 line: Line::new(old_frames, &json!({"features": ["automatic_input"]})),
                 there: 9,
                 conn: conn.clone(),
@@ -107,7 +108,7 @@ async fn reconnect_rejects_downgrade_before_mapping_fallback_data() {
                     "relay",
                     "terminal.attach",
                     json!({"observe": true, "resumed": true, "resize_notifications": true}),
-                    Some(((sink, 7), true)),
+                    Some(((sink, 7), Required { resize: true, ..Default::default() })),
                     Duration::from_secs(1),
                 )
                 .await
@@ -174,6 +175,7 @@ async fn failed_reattach_drains_pending_data_before_close() {
         (conn_key(&conn), 7),
         Relayed {
             automatic_input: true,
+            quiet_human_release: false,
             line: old_line,
             there: 9,
             conn: conn.clone(),

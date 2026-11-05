@@ -19,8 +19,14 @@ use tokio::sync::{mpsc, oneshot};
 
 /// A viewer here that a stream there goes to: its connection and channel.
 type Sink = (Arc<Conn>, u32);
-/// A pending reply, its stream sink and whether resize support is required.
-type Waiting = (oneshot::Sender<Value>, Option<(Sink, bool)>);
+/// A pending reply, its stream sink and the contracts required on reconnect.
+type Waiting = (oneshot::Sender<Value>, Option<(Sink, Required)>);
+
+#[derive(Clone, Copy, Default)]
+struct Required {
+    resize: bool,
+    quiet: bool,
+}
 
 mod identity;
 mod line;
@@ -32,7 +38,7 @@ use mirror::{mirror_events, mirror_replace};
 mod viewers;
 #[cfg(test)]
 use viewers::automatic_input;
-use viewers::{RESIZE_LOST, negotiate_resize, reattach};
+use viewers::{QUIET_LOST, RESIZE_LOST, negotiate_resize, reattach};
 pub use viewers::{Relayed, attach, conn_gone, relay_in};
 
 #[cfg(test)]

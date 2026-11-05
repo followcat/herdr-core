@@ -99,9 +99,10 @@ period, including busy-input serialization, but never touch viewer activity or
 claim size/display ownership. Tag releases at the source; core does not parse them
 to establish whether they are releases. Arbitrary frame splits are valid. Observers
 and streams without the opt-in cannot send kind 7. Absent/false confirmation means
-send DATA, with its existing activity behavior, never AUTOMATIC_INPUT. At this
-implementation step relay attaches confirm false; end-to-end relay support follows
-in the separate relay-contract task. No dead-wire synthesis or replay is provided.
+send DATA, with its existing activity behavior, never AUTOMATIC_INPUT. Every relay must confirm the opt-in. Relays preserve kind 7 byte for byte;
+if a previously capable path loses support on reconnect, close the stream before
+mapping resumed output. Attach again to negotiate DATA fallback. Streams that
+confirmed false remain false across reconnect. No dead-wire synthesis or replay is provided.
 Observers may opt in with `resize_notifications: true` on `terminal.attach`:
 the client must apply incoming RESIZE before consuming subsequent DATA.
 The reply confirms `resize_notifications: true` only when every core on the path

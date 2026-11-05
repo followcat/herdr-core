@@ -2,11 +2,15 @@
 
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 /// A viewer here on a terminal there. It outlives a dropped line: when the
 /// line is back, it is attached again on the same channel here.
 #[derive(Clone)]
 pub struct Relayed {
     pub automatic_input: bool,
+    pub quiet_human_release: bool,
     pub line: Arc<Line>,
     pub there: u32,
     pub conn: Arc<Conn>,
@@ -16,6 +20,7 @@ pub struct Relayed {
 
 /// Why an opted-in stream was refused: a hop on the way lost resize support.
 pub(super) const RESIZE_LOST: &str = "resize notifications lost";
+pub(super) const QUIET_LOST: &str = "quiet human release lost";
 
 /// Viewers left waiting by a dropped line to `m` get their terminal back.
 pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
@@ -32,10 +37,14 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
         params["history"] = 0.into();
         params["resumed"] = true.into();
         negotiate_resize(&line, &mut params);
+        negotiate_quiet(&line, &mut params);
         let deadline = deadline_for(&core, "terminal.attach", &params);
-        let sink = ((r.conn.clone(), here), r.params["resize_notifications"] == true);
+        let sink = (
+            (r.conn.clone(), here),
+            Required { resize: r.params["resize_notifications"] == true, quiet: r.quiet_human_release },
+        );
         let reply = line.call_into(&m.name, "terminal.attach", params, Some(sink), deadline).await;
-        let lost_resize = matches!(&reply, Err(e) if e.message == RESIZE_LOST);
+        let lost_contract = matches!(&reply, Err(e) if e.message == RESIZE_LOST || e.message == QUIET_LOST);
         let mut st = core.lock();
         // Gone meanwhile (the viewer detached): nothing to resume.
         if !st.relayed.contains_key(&(key, here)) {
@@ -59,7 +68,7 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
                 st.relayed.remove(&(key, here));
                 // A downgraded path must not deliver paints sized for the old
                 // contract; any other failure still hands over what arrived.
-                if lost_resize {
+                if lost_contract {
                     r.conn.with(|out| out.close(here, b""));
                 } else {
                     r.conn.with(|out| out.finish(here, b""));
@@ -79,23 +88,43 @@ pub(super) fn negotiate_resize(line: &Line, params: &mut Value) {
     }
 }
 
+fn negotiate_quiet(line: &Line, params: &mut Value) {
+    if params["observe"] == true || !line.features.iter().any(|f| f == "quiet_human_release") {
+        params["quiet_human_release"] = false.into();
+    }
+}
+
+fn quiet_release(line: &Line, params: &Value, reply: &Value) -> bool {
+    params["quiet_human_release"] == true
+        && params["observe"] != true
+        && line.features.iter().any(|f| f == "quiet_human_release")
+        && reply["quiet_human_release"] == true
+}
+
 /// Opens a viewer here on a terminal there: the stream channel there is
 /// relayed to a new channel on this connection, both ways.
 pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Value) -> Result<Value, RpcError> {
-    // Task 07 supports local streams; task 08 adds the end-to-end relay contract.
-    params["quiet_human_release"] = false.into();
     let line = line(core, m).await?;
     negotiate_resize(&line, &mut params);
+    negotiate_quiet(&line, &mut params);
     let here = conn.new_channel();
     conn.with(|out| out.open_paused(here));
     let deadline = deadline_for(core, "terminal.attach", &params);
     match line
-        .call_into(&m.name, "terminal.attach", params.clone(), Some(((conn.clone(), here), false)), deadline)
+        .call_into(
+            &m.name,
+            "terminal.attach",
+            params.clone(),
+            Some(((conn.clone(), here), Required::default())),
+            deadline,
+        )
         .await
     {
         Ok(mut r) => {
             mirror::supported(&mut r, &line.features);
-            r["quiet_human_release"] = false.into();
+            let quiet_human_release = quiet_release(&line, &params, &r);
+            r["quiet_human_release"] = quiet_human_release.into();
+            params["quiet_human_release"] = quiet_human_release.into();
             let there = r["channel"].as_u64().unwrap_or_default() as u32;
             let enabled = params["observe"] == true
                 && params["resize_notifications"] == true
@@ -104,7 +133,15 @@ pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Valu
             params["resize_notifications"] = enabled.into();
             let automatic_input = automatic_input(&line, &r);
             r["automatic_input"] = automatic_input.into();
-            let viewer = Relayed { automatic_input, line, there, conn: conn.clone(), machine: m.id.clone(), params };
+            let viewer = Relayed {
+                automatic_input,
+                quiet_human_release,
+                line,
+                there,
+                conn: conn.clone(),
+                machine: m.id.clone(),
+                params,
+            };
             core.lock().relayed.insert((conn_key(conn), here), viewer);
             r["channel"] = here.into();
             Ok(localize(core, &m.name, &[], r))
@@ -121,8 +158,8 @@ pub fn relay_in(core: &Core, conn: &Arc<Conn>, here: u32, kind: u8, payload: &[u
     let r = {
         let mut st = core.lock();
         let Some(r) = st.relayed.get_mut(&(conn_key(conn), here)) else { return false };
-        if kind == wire::QUIET_HUMAN_RELEASE {
-            return true; // not negotiated by this relay yet; never silently retag it
+        if kind == wire::QUIET_HUMAN_RELEASE && !r.quiet_human_release {
+            return true;
         }
         // What a reattach after a dropped line brings back.
         if kind == wire::RESIZE && payload.len() == 4 {
