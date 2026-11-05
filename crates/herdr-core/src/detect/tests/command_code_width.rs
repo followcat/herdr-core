@@ -56,6 +56,88 @@ fn clipped_builtin_prefixes_share_the_working_and_idle_exclusion() {
 }
 
 #[test]
+fn every_selected_choice_accepts_both_figures_pointers() {
+    let m = bundled("command-code").unwrap();
+    for pointer in ["❯", ">"] {
+        for choice in ["1. Yes, proceed", "2. No, exit"] {
+            let screen = format!(
+                "Do you trust the files in this folder?\n{pointer} {choice}\n↑/↓ to navigate · enter to select · esc to exit"
+            );
+            check(&m, &screen, State::Blocked);
+        }
+    }
+    for file in
+        ["cmd-tool-permission.txt", "cmd-r3/edit-dialog-w80.txt", "cmd-r3/rm-dialog-w80.txt", "cmd-trust-dialog.txt"]
+    {
+        let screen = fixture(file);
+        for pointer in ["❯", ">"] {
+            let selected_yes = screen.replace('❯', pointer);
+            check(&m, &selected_yes, State::Blocked);
+            let selected_no = selected_yes
+                .lines()
+                .map(|line| {
+                    if line.contains("1. Yes") {
+                        line.replace(pointer, " ")
+                    } else if line.trim_start().starts_with("2. No") || line.trim_start().starts_with("3. No") {
+                        format!("{pointer} {}", line.trim_start())
+                    } else {
+                        line.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            check(&m, &selected_no, State::Blocked);
+        }
+    }
+    let extra = fixture("cmd-r3/edit-dialog-w80.txt") + "\n> 4. Yes\n";
+    check(&m, &extra, State::Unknown);
+}
+
+#[test]
+fn generated_ink_width_sweep() {
+    let data: serde_json::Value =
+        serde_json::from_str(include_str!("../../../tests/fixtures/detect/cmd-width-sweep.json")).unwrap();
+    let m = bundled("command-code").unwrap();
+    let idle = m.rules.iter().find(|r| r.id == "composer_prompt").unwrap();
+    let mut totals = std::collections::BTreeMap::<(u64, String), (usize, usize)>::new();
+    let mut failures = Vec::new();
+    for row in data["rows"].as_array().unwrap() {
+        let width = row["width"].as_u64().unwrap();
+        let family = row["family"].as_str().unwrap();
+        let body = row["body"].as_str().unwrap();
+        let working = matches!(family, "status" | "cloud" | "retry");
+        let expected = if working {
+            State::Working
+        } else if family == "completed" {
+            State::Idle
+        } else {
+            State::Blocked
+        };
+        let pointers = row["pointer"].as_str().map_or_else(|| vec!["❯", ">"], |p| vec![p]);
+        for pointer in pointers {
+            let screen = if working { composer(body, pointer, width as usize) } else { body.to_owned() };
+            let verdict = detect(&m, &input(&screen));
+            let pass = verdict.state == expected
+                && (expected != State::Blocked || verdict.kind == Some("permission"))
+                && (!working || !idle.matches(&input(&screen)));
+            let count = totals.entry((width, family.to_owned())).or_default();
+            count.0 += 1;
+            if !pass {
+                count.1 += 1;
+                if failures.len() < 35 {
+                    failures.push(format!("w={width} pointer={pointer} {family} label={} mode={} selected={} expected={expected:?} actual={:?}\n{screen}", row["label"], row["mode"], row["selected"], verdict.state));
+                }
+            }
+        }
+    }
+    for ((width, family), (cases, failed)) in &totals {
+        eprintln!("SWEEP {width} {family} {cases} {failed}");
+    }
+    let failed: usize = totals.values().map(|v| v.1).sum();
+    assert_eq!(failed, 0, "{}", failures.join("\n\n"));
+}
+
+#[test]
 fn prefix_matcher_accepts_only_prefixes_of_its_language() {
     let m = compile(
         r#"

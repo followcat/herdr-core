@@ -219,7 +219,8 @@ paths start at your current folder. Prefer explicit paths for remote work.
   get a screen-inferred status instead (`"source": "screen"` on the record);
   a native report always wins. Command Code's live turn footer means working;
   shell, file-operation and generic-tool dialogs mean blocked/permission,
-  including risk-filtered choices, narrow layouts and wrapped controls.
+  including risk-filtered choices, narrow layouts, wrapped controls and
+  Unicode/ASCII selection pointers.
   Clipped built-in labels in all footer layouts, wrapped retry messages
   and cloud waits also mean working. Clipped prefixes need six characters;
   complete short labels remain valid.

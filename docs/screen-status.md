@@ -164,6 +164,11 @@ character cut, including compact-counter gaps of one space. Arbitrary
 mod-provided labels remain outside the inventory. Built-in UI bytes can be
 imitated exactly; screen text cannot recover their origin.
 
+All selected Yes/No rows accept figures' complete pointer set: `❯` or
+fallback `>` (including `TERM=linux`). This applies to trust, shell, file,
+generic and risk-filtered dialogs, and to the check that No is the final
+numbered choice. A later selected `> 4. Yes` cannot be a No continuation.
+
 Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
 built-in activity label, and either no suffix, a compact counter (including
 decimals and `k`), or full interrupt controls. All permission allowed/denied
