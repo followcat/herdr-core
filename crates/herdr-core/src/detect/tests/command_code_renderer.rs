@@ -214,3 +214,44 @@ fn pasted_trust_dialogs_stay_inside_the_composer() {
     let unboxed = trust.lines().filter(|l| !l.starts_with('─')).collect::<Vec<_>>().join("\n");
     expect(&unboxed.replace("enter to select", "enter to\nselect"), State::Blocked, Some("permission"));
 }
+
+#[test]
+fn file_and_generic_tool_dialogs_match_the_renderer_families() {
+    expect(&fixture("cmd-r3/edit-dialog-w80.txt"), State::Blocked, Some("permission"));
+    for risk in [false, true] {
+        for (title, question, scoped) in [
+            (
+                "Edit File README.md",
+                "Do you want to make this edit to README.md?",
+                "Yes, allow all edits this session [shift+tab]",
+            ),
+            ("Create File", "Do you want to create README.md?", "Yes, allow all edits this session [shift+tab]"),
+            ("Delete File", "Do you want to delete README.md?", "Yes, allow all edits this session [shift+tab]"),
+            ("Execute File", "Do you want to execute helper.sh?", "Yes, allow all edits this session [shift+tab]"),
+            ("File Operation", "Do you want to modify README.md?", "Yes, allow all edits this session [shift+tab]"),
+            (
+                "Tool Permission",
+                "Command Code needs to run renderer_tool.",
+                "Yes, don't ask again for renderer_tool in this project",
+            ),
+        ] {
+            let screen = dialog(title, question, scoped, risk);
+            expect(&screen, State::Blocked, Some("permission"));
+            expect(
+                &screen
+                    .replace("Do you want to", "Do you\nwant to")
+                    .replace("Command Code needs to", "Command Code\nneeds to")
+                    .replace("enter select", "enter\nselect"),
+                State::Blocked,
+                Some("permission"),
+            );
+        }
+    }
+}
+
+#[test]
+fn captured_rm_dialog_keeps_its_normal_three_choices() {
+    let screen = fixture("cmd-r3/rm-dialog-w80.txt");
+    assert!(screen.contains("3. No") && !screen.contains("Destructive command"));
+    expect(&screen, State::Blocked, Some("permission"));
+}

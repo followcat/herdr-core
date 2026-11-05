@@ -129,8 +129,8 @@ supplies the width even when a dialog replaces the composer. This measures
 only one-cell rule glyphs, not arbitrary Unicode text. Equal maxima select
 the last rule, while short command/explanation dividers remain content.
 Short pasted dividers remain draft content. `after_last_full_width_rule`
-selects the dialog or hint area below the last maximum-length divider. The older region
-names keep their existing behavior for other manifests. A pasted divider
+selects the dialog or hint area below the last maximum-length divider.
+The older region names keep their existing behavior for other manifests. A pasted divider
 exactly as wide as the terminal remains ambiguous and is an accepted limit.
 Engine 5 adds `outside_full_width_prompt_box`: below the last full-width
 rule when a verified composer exists, otherwise the whole input. Folder
@@ -142,26 +142,31 @@ Command Code 1.88.3's built-in activity inventory includes all 74 default
 verbs, eight permission result labels, Executing commands, compaction,
 connection and UI status messages. The working rule and idle exclusion use
 identical alternatives, split only to retain the 512-character matcher cap;
-engine 4 has no named matcher references. Arbitrary mod-provided status
+the engine has no named matcher references. Arbitrary mod-provided status
 text is outside this inventory. Known built-in UI shapes can also be
 imitated byte-for-byte; origin cannot be recovered from screen text.
 
 Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
-built-in activity label, and either no suffix, a compact
-counter (including decimals and `k`), or full interrupt controls. All permission allowed/denied labels and `Executing: <command>` are also
-supported. A full-footer
-remainder must sit directly after that activity line. The footer must begin with exactly one ASCII space, as Status/_G renders;
-AssistantMessage continuation text starts at column 2. Turns below 1000ms
-omit WorkedDurationNote, so a final two-space `· Working…` reply is idle.
-The captured
-`Use shift+tab to enable accept edits` Tip can wrap between words; it does
-not admit arbitrary later transcript rows. `✻` summaries and `⠶` message
-bullets cannot count as a busy spinner.
+built-in activity label, and either no suffix, a compact counter (including
+decimals and `k`), or full interrupt controls. All permission allowed/denied
+labels and `Executing: <command>` are supported. A full-footer remainder must
+sit directly after that activity line. The footer must begin with exactly
+one ASCII space, as Status/_G renders; AssistantMessage continuation text
+starts at column 2. Turns below 1000ms omit WorkedDurationNote, so a final
+two-space `· Working…` reply is idle. The captured `Use shift+tab to enable
+accept edits` Tip can wrap between words; it does not admit arbitrary later
+transcript rows. The built-in cloud clone hint is likewise matched as fixed
+text, and RetryMessage has its own column-zero control line. `✻` summaries
+and `⠶` message bullets cannot count as a busy spinner.
 
 Tool permissions are selected below the last full-width rule. The
 `Command Code needs to` and `enter select` phrases match after whitespace
 joining across physical rows (equivalently, `\s+` between their words),
 while numbered Yes and final No choices remain required as physical rows.
+The shell and generic-tool headings pair with `Command Code needs to
+execute/run`; file-operation headings pair with `Do you want to` and
+make-this-edit/create/delete/execute/modify questions. All five file action
+headings and ordinary/risk-filtered choices come from cmd 1.88.3's renderer.
 Risk-filtered dialogs remove scoped approvals and renumber No from 3 to 2;
 a later numbered option after No invalidates the choice block.
 
@@ -231,7 +236,7 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
 
 ## Fork version and updates
 
-This build is `0.1.17-followcat.3` — `0.1.17` plus a fork suffix. The suffix
+This build is `0.1.17-followcat.4` — `0.1.17` plus a fork suffix. The suffix
 works everywhere the version appears (`hc --version`, `server.status`,
 `hello`) and in `hc update --from <binary>`.
 

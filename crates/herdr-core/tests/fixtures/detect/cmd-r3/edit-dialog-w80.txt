@@ -1,0 +1,40 @@
+   ███████ ███████ ███████████ ███████████ ███████ ████████    ████
+   ███ ███ ██  ███ ███ ███ ███ ███ ███ ███ ███ ███ ███  ███ ███████
+   ███     ██  ███ ███ ███ ███ ███ ███ ███ ███████ ███  ███ ███ ███
+   ███ ███ ██  ███ ███ ███ ███ ███ ███ ███ ███████ ███  ███ ███ ███
+   ███████ ███████ ███ ███ ███ ███ ███ ███ ███ ███ ███  ███ ███████
+
+
+# Command Code v1.88.3
+# models: glm-5.3-flash with max effort · taste-1
+# /home/user/acme-shop
+
+❯ Edit README.md: append one line saying "edited by cmd". Use your file
+  edit tool, not the shell.
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+⠶ I'll read README.md first, then append the line with my edit tool.
+
+ READ  [README.md] 1 line
+
+✻ Thought for 1 second [ctrl+o to expand]
+
+⠶ Appending the line now.
+
+
+────────────────────────────────────────────────────────────────────────────────
+
+Edit File README.md
+
+   1 │ - # scratch
+   1 │ + # scratch
+   2 │ + edited by cmd
+
+Do you want to make this edit to README.md?
+
+❯ 1. Yes
+  2. Yes, allow all edits this session [shift+tab]
+  3. No, tell Command Code what to do differently
+
+↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions (Docs ↗)

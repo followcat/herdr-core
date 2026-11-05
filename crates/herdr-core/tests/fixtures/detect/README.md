@@ -63,3 +63,17 @@ Only the private working-directory path is replaced with
 user or host names occur. The tests separately label derived wraps at 25
 columns, wrapped full-footer/Tip cases, and multiline pasted drafts; these
 are not presented as live captures.
+
+## Command Code renderer audit (2026-11-05)
+
+`cmd-r3/edit-dialog-w80.txt` and `cmd-r3/rm-dialog-w80.txt` come from
+`C2-cmd-caps/r3/`, full `hc read` screens at 80 columns. Only the private
+working-directory path is replaced with `/home/user/acme-shop`; all other
+bytes and physical rows are preserved. No user/host names occur.
+
+The edit capture expects blocked/permission. The rm capture is a control:
+it is the ordinary three-choice shell dialog, not risk-marked. Risk-filtered
+Yes/No choices, other file actions and generic tool dialogs are explicit
+synthetic tests built from the installed cmd 1.88.3 renderer's English
+strings. The bundle is read-only; no Command Code instance was run. The
+report records its SHA-256 and zero-based UTF-8 byte offsets for provenance.

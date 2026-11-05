@@ -218,8 +218,10 @@ paths start at your current folder. Prefer explicit paths for remote work.
   In the followcat fork, a small allowlist of agents that never speak 7501
   get a screen-inferred status instead (`"source": "screen"` on the record);
   a native report always wins. Command Code's live turn footer means working;
-  its tool-permission dialog means blocked/permission, including narrow
-  layouts and wrapped controls. A complete composer box proves idle even
+  shell, file-operation and generic-tool dialogs mean blocked/permission,
+  including risk-filtered choices, narrow layouts and wrapped controls.
+  Built-in footer labels come from cmd 1.88.3; arbitrary mod-provided status
+  text is outside that inventory. A complete composer box proves idle even
   without its hint row; multiline drafts cannot supply status evidence.
   Pasting a divider exactly as wide as the terminal remains ambiguous.
   After recovery, an inferred root waits for a
