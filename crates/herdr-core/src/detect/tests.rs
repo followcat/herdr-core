@@ -624,3 +624,5 @@ fn limits_parse_from_the_config_table() {
 mod command_code_narrow;
 
 mod command_code_renderer;
+#[path = "tests/command_code_round4.rs"]
+mod command_code_round4;
