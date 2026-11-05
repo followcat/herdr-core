@@ -1,6 +1,8 @@
 use super::*;
 
 mod recovery;
+#[cfg(unix)]
+mod relink;
 
 /// A live terminal on a fake holder, old enough that `send`'s settle passes.
 fn terminal_on_fake_holder(core: &Core) -> (u32, mpsc::Receiver<Vec<u8>>) {

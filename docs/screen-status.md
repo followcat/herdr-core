@@ -142,6 +142,11 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   root withdrawn later — e.g. the foreground agent exits — does count a turn
   exactly like a native status clearing does. Detection disabled, an empty
   catalog, or an agent dropped from the catalog withdraws the same quiet way.
+- **A detached holder freezes its terminals.** Reader failure invalidates
+  pending verdicts immediately. Until relink or finish, detection collects,
+  commits, settles, confirms, expires and withdraws nothing on those terminals;
+  a missing holder means wait. Native reports and finish accounting stay live.
+  Relink marks an inferred root unconfirmed and starts normal reconfirmation.
 - **In-flight verdicts die at the boundary.** Adoption, relink, finish,
   removal, restart requests, shutdown and handover bump a per-terminal
   invalidation generation and the output sequence under the state lock, so a

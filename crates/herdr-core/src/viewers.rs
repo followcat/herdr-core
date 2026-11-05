@@ -225,9 +225,9 @@ impl Core {
     /// `None` withdraws the inferred root (evidence gone, foreground left).
     /// The screen worker is its caller; tests drive it directly.
     pub(crate) fn inferred_status(&self, st: &mut State, id: u32, verdict: Option<(&str, Option<&str>)>) {
-        if st.screen_frozen {
-            // Between a stop/restart request and the next core: nothing
-            // publishes, expires or withdraws on the way out.
+        if st.screen_detection_frozen(id) {
+            // Stop/restart or a detached holder: keep the last evidence
+            // until adoption or normal finish accounting takes over.
             return;
         }
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());

@@ -20,6 +20,8 @@ use tokio::time::{Duration, Instant};
 /// `generation` never resets while a terminal exists.
 #[derive(Default)]
 pub struct ScreenWatch {
+    /// Its holder detached; keep the last root until adoption or finish.
+    pub(crate) detached: bool,
     /// The `output_seq` whose snapshot was last evaluated to a verdict.
     last_seq: Option<u64>,
     /// When the current run of idle evidence began; `settle` runs from here.
@@ -164,6 +166,11 @@ impl Core {
     /// One terminal's step, under the caller's lock: eligibility, the
     /// unchanged-screen confirm, or an owned snapshot for the off-lock pass.
     fn step(&self, st: &mut State, id: u32, catalog: &Catalog) -> Option<Snap> {
+        // Detach gates every inferred mutation, including expiry and cached
+        // idle confirmation. A missing holder is absence of evidence.
+        if st.screen_detection_frozen(id) {
+            return None;
+        }
         // Facts first; the terminal borrow ends before anything mutates.
         let Some((live, reported, agent, program, foreground)) = st.reg.terminals.get(&id).map(|t| {
             (
@@ -184,8 +191,8 @@ impl Core {
             self.inferred_status(st, id, None);
             return None;
         }
-        if !live || st.link(id).is_none() || agent.is_none() {
-            // Gone, holderless, or no supported agent in front: whatever the
+        if !live || agent.is_none() {
+            // Gone or no supported agent in front: whatever the
             // screen said about the old program is withdrawn — never "done".
             self.inferred_status(st, id, None);
             if let Some(w) = st.screen_status.get_mut(&id) {
@@ -269,8 +276,7 @@ impl Core {
         };
         let eligible = t.is_live()
             && !t.reported
-            && !st.screen_frozen
-            && st.link(snap.id).is_some()
+            && !st.screen_detection_frozen(snap.id)
             && !st.stitching.contains(&snap.id)
             && agent.is_some()
             && st.screens.get(&snap.id).is_some_and(|s| !s.dec_mode(2026));

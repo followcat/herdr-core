@@ -129,6 +129,22 @@ impl State {
         self.holders.iter().find(|l| l.instance == instance)
     }
 
+    /// Removing a holder is a detection boundary, even if it reconnects
+    /// before the worker's next tick. Native reports and finish stay live.
+    fn detach_holder(&mut self, instance: &str) -> Option<Link> {
+        for t in self.reg.terminals.values().filter(|t| t.holder.as_deref() == Some(instance)) {
+            let watch = self.screen_status.entry(t.id()).or_default();
+            watch.invalidate();
+            watch.detached = true;
+        }
+        let at = self.holders.iter().position(|l| l.instance == instance)?;
+        Some(self.holders.remove(at))
+    }
+
+    pub(crate) fn screen_detection_frozen(&self, id: u32) -> bool {
+        self.screen_frozen || self.screen_status.get(&id).is_some_and(|w| w.detached) || self.link(id).is_none()
+    }
+
     /// The holder new terminals go to.
     pub fn current(&self) -> Option<&Link> {
         self.holders.iter().find(|l| l.current)
@@ -524,6 +540,7 @@ impl Core {
             // staleness axes bump. An inferred root the registry kept stands
             // unconfirmed until a verdict from this screen re-proves it.
             st.invalidate_screen(id);
+            st.screen_status.get_mut(&id).expect("invalidated").detached = false;
             *st.output_seq.entry(id).or_default() += 1;
             if st.reg.terminals.get(&id).is_some_and(|t| t.status.as_ref().is_some_and(|s| s.source.is_some())) {
                 st.screen_status.entry(id).or_default().unconfirmed_until =
@@ -575,9 +592,8 @@ impl Core {
         let _starting = relink.then(|| self.holder_start.lock().unwrap_or_else(|p| p.into_inner()));
         relink &= !stopping(); // a stop that began meanwhile
         let mut st = self.lock();
-        let Some(at) = st.holders.iter().position(|l| l.instance == instance) else { return };
         // Kept to the end: dropping it wakes a goodbye, which must find the sweep below counted.
-        let link = st.holders.remove(at);
+        let Some(link) = st.detach_holder(&instance) else { return };
         let current = link.current;
         if relink {
             drop(st);
@@ -649,7 +665,7 @@ impl Core {
             let _ = ours.shutdown(std::net::Shutdown::Both);
         }
         let mut st = self.lock();
-        st.holders.retain(|l| l.instance != instance);
+        st.detach_holder(instance);
         st.disconnected.insert(instance.into(), socket.to_path_buf());
     }
 
@@ -778,6 +794,7 @@ impl Core {
         }
         st.relays.remove(&id);
         st.invalidate_screen(id);
+        st.screen_status.get_mut(&id).expect("invalidated").detached = false;
         if let Some(snapshot) = st.screens.remove(&id).and_then(|s| s.snapshot())
             && let Err(e) = write_atomic(&self.snapshot_path(id), &snapshot)
         {
