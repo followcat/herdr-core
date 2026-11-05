@@ -3,7 +3,7 @@
 # Command Code 1.88.2–1.88.3: turn footers above the composer and tool
 # permission dialogs are captured alongside trust, draft and idle screens.
 id = "command-code"
-version = "2026.11.05.2"
+version = "2026.11.05.3"
 min_engine_version = 4
 updated_at = "2026-11-05T00:00:00Z"
 aliases = ["command_code"]
@@ -41,7 +41,7 @@ line_regex = ['^\s*❯?\s*1\.\s+(?i:yes)\b']
 id = "turn_footer"
 state = "working"
 priority = 200
-region = "above_prompt_box"
+region = "above_full_width_prompt_box"
 visible_working = true
 regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z']
 
@@ -51,11 +51,11 @@ regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[
 id = "composer_prompt"
 state = "idle"
 priority = 100
-region = "prompt_box_body"
+region = "full_width_prompt_box_body"
 visible_idle = true
 line_regex = ['^\s*❯(?:\s|$)']
 not = [
-  { region = "above_prompt_box", regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z'] },
+  { region = "above_full_width_prompt_box", regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z'] },
 ]
 
 # The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows

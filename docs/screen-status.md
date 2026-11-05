@@ -122,6 +122,15 @@ checking the area above it for a live busy footer; draft text is never busy
 UI evidence. A complete composer box is readiness evidence even if its
 shortcuts hint is off screen.
 
+Command Code's `full_width_prompt_box_body` and
+`above_full_width_prompt_box` require a pair of pure horizontal rules of the
+bottom rule's length, with a prompt row inside. The bottom rule supplies the
+width without estimating display-cell widths from arbitrary Unicode text.
+Short pasted dividers remain draft content. `after_last_full_width_rule`
+selects the dialog or hint area below that bottom divider. The older region
+names keep their existing behavior for other manifests. A pasted divider
+exactly as wide as the terminal remains ambiguous and is an accepted limit.
+
 ## Recovery
 
 A core restart (`hc server restart`, `hc update`, crash recovery, kept-terminal

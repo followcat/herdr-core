@@ -51,3 +51,34 @@ fn nested_gate_regions_exclude_drafts_and_inherit_within_the_selected_slice() {
         Manifest::compile("id='x'\n[[rules]]\nid='r'\nnot=[{region='bogus',contains=['x']}]\ncontains=['y']").is_err()
     );
 }
+
+#[test]
+fn a_short_pasted_divider_cannot_expose_a_fake_working_footer() {
+    expect(&draft("first\n ○ Harmonizing…  esc to interrupt • 3s\n──────────\nmore text"), State::Idle, None);
+}
+
+#[test]
+fn full_width_regions_keep_short_dividers_inside_the_composer() {
+    for newline in ["\n", "\r\n"] {
+        let bar = "─".repeat(32);
+        let above = "reply";
+        let body = "❯ first\n──────────\n · Fake…  12\nlast".replace('\n', newline);
+        let screen = format!("{above}{newline}{bar}{newline}{body}{newline}{bar}{newline}hint");
+        let i = input(&screen);
+        let region = |name: &str| name.parse::<manifest::Region>().unwrap().extract(&i);
+        assert_eq!(region("above_full_width_prompt_box"), format!("{above}{newline}"));
+        assert_eq!(region("full_width_prompt_box_body"), format!("{body}{newline}"));
+        assert_eq!(region("after_last_full_width_rule"), "hint");
+    }
+}
+
+macro_rules! capture {
+    ($test:ident, $file:literal, $state:ident, $kind:expr) => {
+        #[test]
+        fn $test() {
+            expect(&fixture(concat!("cmd-narrow/", $file, ".txt")), State::$state, $kind);
+        }
+    };
+}
+
+capture!(capture_draft60, "draft60", Idle, None);

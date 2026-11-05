@@ -74,6 +74,58 @@ pub fn current_shell_block(content: &str) -> &str {
     &above[line_offset(above, at)..]
 }
 
+// Full-width boxes use the bottom pure rule's glyph count as the width.
+// This avoids guessing display-cell widths from arbitrary Unicode output.
+fn last_full_width_rule(lines: &[&str]) -> Option<(usize, usize)> {
+    lines.iter().enumerate().rev().find_map(|(i, line)| {
+        let line = line.trim_end();
+        let width = line.chars().count();
+        (width >= 3 && line.chars().all(|c| c == '─')).then_some((i, width))
+    })
+}
+
+fn full_width_box(lines: &[&str]) -> Option<(usize, usize)> {
+    let (_, width) = last_full_width_rule(lines)?;
+    let mut bottom = None;
+    for (i, line) in lines.iter().enumerate().rev() {
+        if line.trim_end().chars().count() != width || !line.trim_end().chars().all(|c| c == '─') {
+            continue;
+        }
+        if let Some(end) = bottom
+            && lines[i + 1..end].iter().find(|l| !l.trim().is_empty()).is_some_and(|l| {
+                let l = l.trim_start();
+                l == "❯" || l.starts_with("❯ ")
+            })
+        {
+            return Some((i, end));
+        }
+        bottom = Some(i);
+    }
+    None
+}
+
+/// A verified full-width rule / prompt / full-width rule box's body.
+/// A pasted shorter rule stays in the body. Equal-width pastes are ambiguous.
+pub fn full_width_prompt_box_body(content: &str) -> &str {
+    let lines: Vec<&str> = content.lines().collect();
+    let Some((top, bottom)) = full_width_box(&lines) else { return "" };
+    &content[line_offset(content, top + 1)..line_offset(content, bottom)]
+}
+
+/// Only the UI above a verified full-width prompt box; absent box is empty.
+pub fn above_full_width_prompt_box(content: &str) -> &str {
+    let lines: Vec<&str> = content.lines().collect();
+    let Some((top, _)) = full_width_box(&lines) else { return "" };
+    &content[..line_offset(content, top)]
+}
+
+/// Below the last pure full-width rule (the box bottom or dialog divider).
+pub fn after_last_full_width_rule(content: &str) -> &str {
+    let lines: Vec<&str> = content.lines().collect();
+    let Some((last, _)) = last_full_width_rule(&lines) else { return "" };
+    from_line(content, last + 1)
+}
+
 // --- Codex prompt/block markers ------------------------------------------
 
 /// `›` alone or starting a line: the Codex prompt.

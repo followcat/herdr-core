@@ -1,0 +1,40 @@
+  cellular networks hold seconds of data in operator
+  buffers. Delay-based algorithms (Vegas, Westwood)
+  and hybrids (Compound TCP) sought other signals.
+  Google's BBR, deployed in 2016, abandoned inference
+  entirely: it measures the bottleneck bandwidth and
+  minimum RTT directly, then paces packets to fill
+  exactly the bandwidth-delay product without building
+   queues. On lossy and long-delay paths BBR is
+  transformative, and it now carries much of Google's
+  and Netflix's traffic — though early versions were
+  unfair to CUBIC on shared bottlenecks, a problem the
+   BBRv2/v3 line explicitly targets.
+
+  The latest shift is where the algorithm lives. QUIC
+  implements congestion control in userspace, so
+  improvements ship with applications instead of
+  waiting on kernel releases. Specialized regimes have
+   their own controllers — DCQCN for RDMA datacenters,
+   Swift and Copa for tail latency, tuned profiles for
+   5G.
+
+  Four decades on, the skeleton is unchanged: probe
+  gently, back off multiplicatively, share fairly.
+  What evolved is everything around that skeleton —
+  what counts as congestion evidence, how fast
+  capacity is probed, and where the algorithm runs.
+
+  DONE
+
+✻ Worked for 6s
+
+────────────────────────────────────────────────────────────
+❯ first line of a draft
+ · Fake…  12
+──────────────────────────────
+more text after a pasted rule
+❯ 1. Yes
+enter select · Command Code needs to
+last line
+────────────────────────────────────────────────────────────
