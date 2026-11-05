@@ -143,7 +143,10 @@ Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
 built-in activity label, and either no suffix, a compact
 counter (including decimals and `k`), or full interrupt controls. All permission allowed/denied labels and `Executing: <command>` are also
 supported. A full-footer
-remainder must sit directly after that activity line. The captured
+remainder must sit directly after that activity line. The footer must begin with exactly one ASCII space, as Status/_G renders;
+AssistantMessage continuation text starts at column 2. Turns below 1000ms
+omit WorkedDurationNote, so a final two-space `· Working…` reply is idle.
+The captured
 `Use shift+tab to enable accept edits` Tip can wrap between words; it does
 not admit arbitrary later transcript rows. `✻` summaries and `⠶` message
 bullets cannot count as a busy spinner.

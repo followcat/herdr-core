@@ -184,3 +184,11 @@ fn risk_filtered_choices_end_in_a_second_no_option() {
     // wrap. A later Yes is not a completed permission-choice block.
     expect(&screen.replace("\n\n↑/↓", "\n  3. Yes\n\n↑/↓"), State::Unknown, None);
 }
+
+#[test]
+fn subsecond_finished_reply_cannot_impersonate_a_bare_footer() {
+    // AssistantMessage continues at column 2; WorkedDurationNote emits
+    // nothing for duration < 1000ms. No summary can retire this fake footer.
+    expect(&composer("⠶ Finished\n  · Working…", "Ask your question...", 32), State::Idle, None);
+    expect(&composer(" · Working…", "Ask your question...", 32), State::Working, None);
+}
