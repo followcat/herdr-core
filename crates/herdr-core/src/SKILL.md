@@ -220,7 +220,8 @@ paths start at your current folder. Prefer explicit paths for remote work.
   a native report always wins. Command Code's live turn footer means working;
   shell, file-operation and generic-tool dialogs mean blocked/permission,
   including risk-filtered choices, narrow layouts and wrapped controls.
-  Built-in footer labels come from cmd 1.88.3; arbitrary mod-provided status
+  Wrapped retry messages and cloud waits also mean working.
+  Built-in English footer labels come from cmd 1.88.3; arbitrary mod-provided status
   text is outside that inventory. A complete composer box proves idle even
   without its hint row; normal, shell-input (`!`) and ASCII (`>`) composers
   isolate multiline drafts. An apparent composer with unverifiable edges

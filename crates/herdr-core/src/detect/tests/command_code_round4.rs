@@ -112,3 +112,33 @@ fn every_composer_glyph_isolates_trust_drafts_and_uncertain_boxes_fail_closed() 
     expect(trust, State::Blocked);
     expect(&fixture("cmd-trust-dialog.txt"), State::Blocked);
 }
+#[test]
+fn retry_message_accepts_only_adjacent_renderer_continuations() {
+    for (width, body) in [
+        (32, "Connection Issue. Retrying\n(attempt 2)"),
+        (24, "Connection Issue.\nRetrying (attempt 2)"),
+        (18, "Connection Issue.\nRetrying (attempt\n2)"),
+    ] {
+        for dots in ["", ".", "..", "..."] {
+            for newline in ["\n", "\r\n"] {
+                let rendered = format!("{body}{dots}").replace('\n', newline);
+                expect(&composer(&rendered, "❯", "", width), State::Working);
+                let padded = format!("{body}{dots}")
+                    .lines()
+                    .map(|line| format!("{line:width$}"))
+                    .collect::<Vec<_>>()
+                    .join(newline);
+                expect(&composer(&padded, "❯", "", width), State::Working);
+            }
+        }
+    }
+    for fake in [
+        "Connection Issue. Retrying\n\n(attempt 2)...",
+        "Connection Issue. Retrying\nAssistant reply\n(attempt 2)...",
+        "  Connection Issue. Retrying\n  (attempt 2)...",
+        "Connection Issue. Retrying\n(attempt 2)...\nFinished reply",
+    ] {
+        expect(&composer(fake, "❯", "", 32), State::Idle);
+    }
+    expect(&composer("Finished reply", "❯", "Connection Issue. Retrying\n(attempt 2)...", 32), State::Idle);
+}

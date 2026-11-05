@@ -146,7 +146,8 @@ wrapped title/control phrases are compared across whitespace.
 
 Command Code 1.88.3's built-in activity inventory includes all 74 default
 verbs, eight permission result labels, Executing commands, compaction,
-connection and UI status messages. The working rule and idle exclusion use
+connection, updater and session naming, settings, permission waits/results,
+submit errors and harness retry/compaction messages. The working rule and idle exclusion use
 identical alternatives, split only to retain the 512-character matcher cap;
 the engine has no named matcher references. Arbitrary mod-provided status
 text is outside this inventory. Known built-in UI shapes can also be
@@ -157,12 +158,17 @@ built-in activity label, and either no suffix, a compact counter (including
 decimals and `k`), or full interrupt controls. All permission allowed/denied
 labels and `Executing: <command>` are supported. A full-footer remainder must
 sit directly after that activity line. The footer must begin with exactly
-one ASCII space, as Status/_G renders; AssistantMessage continuation text
+one ASCII space, as Status/_G normally renders (the long built-in language
+save error and stream-drop message can overflow that first cell). Cloud
+waits use ShimmerLine: its icon may shrink to one cell and its text may
+wrap directly to column 2 or 3. AssistantMessage continuation text
 starts at column 2. Turns below 1000ms omit WorkedDurationNote, so a final
 two-space `· Working…` reply is idle. The captured `Use shift+tab to enable
 accept edits` Tip can wrap between words; it does not admit arbitrary later
 transcript rows. The built-in cloud clone hint is likewise matched as fixed
-text, and RetryMessage has its own column-zero control line. `✻` summaries
+text. RetryMessage has its own column-zero text, which may wrap only
+between its fixed words onto the immediately following unindented row;
+blank or unrelated intervening rows do not count. `✻` summaries
 and `⠶` message bullets cannot count as a busy spinner.
 
 Tool permissions are selected below the last full-width rule. The
