@@ -263,7 +263,7 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
 
 ## Fork version and updates
 
-This build is `0.1.17-followcat.4` — `0.1.17` plus a fork suffix. The suffix
+This build is `0.1.17-followcat.6` — `0.1.17` plus a fork suffix. The suffix
 works everywhere the version appears (`hc --version`, `server.status`,
 `hello`) and in `hc update --from <binary>`.
 

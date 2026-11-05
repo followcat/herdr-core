@@ -187,3 +187,9 @@ fn prefix_matcher_keeps_manifest_limits_and_rejects_assertions() {
         assert!(Manifest::compile(&text).is_err());
     }
 }
+
+#[test]
+fn screen_status_documentation_identifies_this_build() {
+    let docs = include_str!("../../../../../docs/screen-status.md");
+    assert!(docs.contains(&format!("This build is `{}`", env!("CARGO_PKG_VERSION"))));
+}
