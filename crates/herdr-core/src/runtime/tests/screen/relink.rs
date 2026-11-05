@@ -197,3 +197,56 @@ async fn holderless_detection_waits_without_a_detach_record() {
     drop(core);
     remove_root(&root);
 }
+
+async fn expiry_only_after_relink(config: &str) {
+    let (core, root, id, act, waiting) = detaching_holder(true);
+    core.screen_status_pass(&test_detect_catalog()).await;
+    // Startup has restored the root, then its holder detaches before
+    // the empty-catalog worker gets its first reconciliation chance.
+    core.lock().screen_status.get_mut(&id).unwrap().unconfirmed_until =
+        Some(tokio::time::Instant::now() + crate::screen_status::RECONFIRM);
+    let (turn, news, seq) = {
+        let st = core.lock();
+        let t = &st.reg.terminals[&id];
+        (t.turn, t.news, st.events.seq)
+    };
+    act.send(()).unwrap();
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+    std::fs::write(&core.paths.config, config).unwrap();
+    let worker = tokio::spawn(core.clone().watch_screen_status());
+    tokio::task::yield_now().await;
+    tokio::task::yield_now().await;
+    act.send(()).unwrap();
+    wait_for(&core, |st| st.link(id).is_some());
+    let until = core.lock().screen_status[&id].unconfirmed_until.unwrap();
+    let before = until - tokio::time::Instant::now() - Duration::from_millis(1);
+    tokio::time::advance(before).await;
+    tokio::task::yield_now().await;
+    assert_eq!(word(&core, id).as_deref(), Some("working"));
+    assert_eq!(core.lock().events.seq, seq);
+    // Expiry-only still runs on the worker's cadence: the first tick
+    // after the deadline withdraws, without any foreground observation.
+    tokio::time::advance(Duration::from_millis(501)).await;
+    tokio::task::yield_now().await;
+    {
+        let st = core.lock();
+        let t = &st.reg.terminals[&id];
+        assert!(t.status.is_none(), "empty catalog stranded a restored root: {config}");
+        assert_eq!((t.turn, t.news, st.events.seq), (turn, news, seq + 1));
+    }
+    assert!(!worker.is_finished(), "future relinks can restore more roots");
+    worker.abort();
+    let _ = worker.await;
+    drop(core);
+    remove_root(&root);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_empty_catalog_keeps_expiring_roots_after_detach_and_relink() {
+    expiry_only_after_relink("[detect]\nagents = []\n").await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn disabled_detection_keeps_expiring_roots_after_detach_and_relink() {
+    expiry_only_after_relink("[detect]\nenabled = false\n").await;
+}

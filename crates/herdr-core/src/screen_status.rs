@@ -104,17 +104,6 @@ impl Core {
         for warning in &catalog.warnings {
             eprintln!("core: detect: {warning}");
         }
-        if catalog.agents().next().is_none() {
-            // Nothing can ever be re-proven here: any root the registry
-            // restored is withdrawn now, then the worker just stops.
-            let mut st = self.lock();
-            let restored: Vec<u32> =
-                st.screen_status.iter().filter(|(_, w)| w.unconfirmed_until.is_some()).map(|(id, _)| *id).collect();
-            for id in restored {
-                self.inferred_status(&mut st, id, None);
-            }
-            return;
-        }
         loop {
             tokio::time::sleep(CADENCE).await;
             self.screen_status_pass(&catalog).await;
@@ -125,6 +114,22 @@ impl Core {
     /// all in a single awaited blocking task, then commit under per-terminal
     /// re-locks. Nothing overlaps passes — the caller is the only driver.
     pub(crate) async fn screen_status_pass(&self, catalog: &Catalog) {
+        if catalog.agents().next().is_none() {
+            // Disabled/empty detection can never collect or confirm, but
+            // adoption may restore another root at any time. Keep expiring
+            // those roots, and retry gated withdrawals on later ticks.
+            let mut st = self.lock();
+            let expired: Vec<u32> = st
+                .screen_status
+                .iter()
+                .filter(|(_, w)| w.unconfirmed_until.is_some_and(|at| at <= Instant::now()))
+                .map(|(id, _)| *id)
+                .collect();
+            for id in expired {
+                self.inferred_status(&mut st, id, None);
+            }
+            return;
+        }
         let snaps = self.screen_status_collect(catalog);
         if snaps.is_empty() {
             return;

@@ -142,8 +142,10 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   persists, but counts **no turn** and produces no completion news (a
   wherdr-style "unread turn" derivation stays false). A *confirmed* inferred
   root withdrawn later — e.g. the foreground agent exits — does count a turn
-  exactly like a native status clearing does. Detection disabled, an empty
-  catalog, or an agent dropped from the catalog withdraws the same quiet way.
+  exactly like a native status clearing does. Disabled detection and an empty
+  catalog keep an expiry-only worker alive, including across detached holders
+  and later adoptions. An agent dropped from a non-empty catalog withdraws
+  the same quiet way once its foreground is freshly observed.
 - **Failed foreground lookups are unknown.** A missing link, timeout or
   malformed reply keeps the last observed foreground and emits no foreground
   or inferred-status event. An actual reply of “no foreground”, or a process

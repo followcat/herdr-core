@@ -488,11 +488,17 @@ async fn a_restored_root_is_withdrawn_when_detection_is_off() {
     core.screen_status_pass(&test_detect_catalog()).await;
     adopt_onto(&core, &root, id, "crash", b"WORKING NOW\r\n");
     assert!(core.lock().screen_status[&id].unconfirmed_until.is_some());
-    // `[detect] enabled = false`: the worker reconciles restored roots before
-    // its empty-catalog early return, so the root drops now, not at 30 s.
+    // Disabled detection still expires roots and keeps watching for later
+    // adoptions. It never uses the old screen to confirm them.
     std::fs::write(&core.paths.config, "[detect]\nenabled = false\n").unwrap();
-    core.clone().watch_screen_status().await;
-    assert_eq!(word(&core, id), None, "detection off: withdrawn before the worker exits");
+    let worker = tokio::spawn(core.clone().watch_screen_status());
+    tokio::task::yield_now().await;
+    tokio::time::advance(crate::screen_status::RECONFIRM + Duration::from_millis(500)).await;
+    tokio::task::yield_now().await;
+    assert_eq!(word(&core, id), None, "detection off: expiry remains live");
+    assert!(!worker.is_finished());
+    worker.abort();
+    let _ = worker.await;
     drop(core);
     remove_root(&root);
 }
