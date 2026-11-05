@@ -141,3 +141,82 @@ fn linked_checkout_and_unborn_and_promisor_repos_keep_independent_facts() {
     assert_eq!(facts.branch.as_deref(), Some("main"));
     assert_eq!(facts.ahead_behind, None);
 }
+
+#[test]
+fn partial_clone_signals_never_fetch_a_missing_upstream_object_or_launch_its_helper() {
+    use std::os::unix::fs::PermissionsExt;
+    if std::env::var_os("C3_GIT_OLD_LAZY_FETCH").is_none() {
+        let s = session();
+        let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|p| p.join("git"))
+            .find(|p| p.is_file())
+            .unwrap();
+        let shim = s.root.join("git");
+        // Model Git versions that ignore this environment variable. The safety
+        // regression must not pass merely because the installed Git honors it.
+        fs::write(&shim, format!("#!/bin/sh\nunset GIT_NO_LAZY_FETCH\nexec '{}' \"$@\"\n", real.display())).unwrap();
+        fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+        let output = s
+            .program(std::env::current_exe().unwrap())
+            .args(["--exact", "partial_clone_signals_never_fetch_a_missing_upstream_object_or_launch_its_helper"])
+            .env("C3_GIT_OLD_LAZY_FETCH", "1")
+            .env("PATH", format!("{}:{}", s.root.display(), std::env::var("PATH").unwrap()))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let s = session();
+    let root = repo(&s);
+    let initial = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", "missing parent"]);
+    let missing = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", "upstream"]);
+    let upstream = git(&s, &root, &["rev-parse", "HEAD"]);
+    git(&s, &root, &["update-ref", "refs/remotes/origin/main", &upstream]);
+    git(&s, &root, &["reset", "--quiet", "--hard", &initial]);
+    fs::remove_file(root.join(".git/objects").join(&missing[..2]).join(&missing[2..])).unwrap();
+    let sentinel = s.root.join("helper-ran");
+    let helper = s.root.join("offline-helper");
+    fs::write(&helper, format!("#!/bin/sh\nprintf ran > '{}'\nexit 1\n", sentinel.display())).unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+    for (key, value) in [
+        ("remote.origin.url", "ssh://host-a/acme-shop"),
+        ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
+        ("branch.main.remote", "origin"),
+        ("branch.main.merge", "refs/heads/main"),
+        ("core.sshCommand", helper.to_str().unwrap()),
+        ("core.askPass", helper.to_str().unwrap()),
+        ("credential.helper", helper.to_str().unwrap()),
+    ] {
+        git(&s, &root, &["config", key, value]);
+    }
+    let repo = discover(&root, None).unwrap().repository.unwrap();
+    // Presence is deliberately conservative, including false/unknown values: no
+    // count depends on a version-specific interpretation of partial-clone config.
+    for (key, value) in [
+        ("remote.origin.promisor", "yes"),
+        ("remote.origin.promisor", "on"),
+        ("remote.origin.promisor", "1"),
+        ("remote.origin.promisor", "true"),
+        ("remote.origin.promisor", ""),
+        ("remote.origin.promisor", "false"),
+        ("remote.origin.partialCloneFilter", "blob:none"),
+        ("extensions.partialClone", "origin"),
+    ] {
+        git(&s, &root, &["config", key, value]);
+        let mut probe = Probe::new(s.root.clone(), None);
+        let observed = probe.refresh(&repo, Instant::now());
+        assert!(!sentinel.exists(), "configured helper ran for {key}={value}");
+        let facts = observed.unwrap();
+        assert_eq!(facts.branch.as_deref(), Some("main"));
+        assert!(facts.ahead_behind.is_none(), "partial-clone counts must remain unknown");
+        assert_eq!(probe.processes(), 2, "only config and symbolic HEAD, no object traversal");
+        git(&s, &root, &["config", "--unset-all", key]);
+    }
+}

@@ -24,6 +24,7 @@ Every child is a direct `git` invocation with this fixed prefix:
 
 ```text
 git --no-pager -c core.fsmonitor=false -c core.hooksPath=/dev/null
+    -c core.sshCommand=false -c protocol.allow=never
     -C <discovered root> --git-dir <discovered git directory> <subcommand>
 ```
 
@@ -38,7 +39,8 @@ rev-list --left-right --count <validated head oid>...<validated upstream oid>
 
 The environment is cleared, then contains only PATH, the machine-side HOME/XDG_CONFIG_HOME,
 LC_ALL=C, GIT_CONFIG_NOSYSTEM=1, GIT_OPTIONAL_LOCKS=0, GIT_TERMINAL_PROMPT=0 and
-GIT_NO_LAZY_FETCH=1. There is no inherited GIT_CONFIG_COUNT/GIT_DIR/GIT_WORK_TREE/GIT_EXEC_PATH,
+GIT_NO_LAZY_FETCH=1, GIT_SSH_COMMAND=false and GIT_ASKPASS=false.
+There is no inherited GIT_CONFIG_COUNT/GIT_DIR/GIT_WORK_TREE/GIT_EXEC_PATH,
 shell, pager, fetch, status/diff, checkout, credential request or worktree scan. Config includes
 and conditional/worktree config are evaluated by Git; include origins/missing include targets
 are watched. The small pure upstream mapper follows remote `.` and explicit/wildcard/default
@@ -48,8 +50,11 @@ The whole refresh has at most eight subprocesses, a two-second deadline and 1 Mi
 stdout/stderr capture; individual children have at most one second. Both pipes are nonblocking
 and drained, so stderr cannot deadlock stdout. Timeout/overflow kills the process group and
 reaps the child. Unix pre-exec limits address space to 512 MiB, CPU to two seconds and core dumps
-to zero. A huge included config can invalidate repository facts only. Promisor repositories
-omit counts entirely rather than relying on older Git versions to suppress lazy fetch correctly.
+to zero. A huge included config can invalidate repository facts only. Any configured
+`extensions.partialClone`, `remote.*.promisor` or `remote.*.partialCloneFilter` entry omits counts
+and skips object commands. This is deliberately conservative even for false/empty/unrecognized
+values: no Git version's boolean parsing or lazy-fetch environment support is trusted to prevent
+network/helpers. SSH, askpass and protocol overrides provide an additional barrier.
 
 Windows deliberately starts no Git child until containment is implemented there. It can still
 report discovered identity/labels and a bounded readable loose-HEAD branch; counts are unknown.

@@ -131,6 +131,13 @@ fn identity(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Pat
         return Err(io::Error::other("cannot read repository HEAD"));
     };
     let branch = full_branch.as_deref().and_then(|s| s.strip_prefix("refs/heads/")).map(String::from);
+    // Fail closed on every partial-clone signal, regardless of spelling or
+    // boolean value. No object command should depend on Git-version-specific
+    // lazy-fetch suppression or config interpretation.
+    let promisor = config.iter().any(|(key, _)| {
+        key == "extensions.partialclone"
+            || (key.starts_with("remote.") && (key.ends_with(".promisor") || key.ends_with(".partialclonefilter")))
+    });
     let upstream = branch.as_deref().and_then(|branch| upstream(&config, branch));
     for name in full_branch.iter().chain(upstream.iter()) {
         if valid_ref(name) {
@@ -138,16 +145,12 @@ fn identity(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Pat
             files.insert(repo.git_dir.join(name));
         }
     }
-    let oids = if let Some(upstream) = upstream.filter(|s| valid_ref(s)) {
+    let oids = if let Some(upstream) = upstream.filter(|s| !promisor && valid_ref(s)) {
         let output = budget.run(&["rev-parse", "--revs-only", "--end-of-options", "HEAD", &upstream])?;
         output.status.success().then(|| oid_pair(&output.stdout)).flatten()
     } else {
         None
     };
-    let promisor = config.iter().any(|(key, value)| {
-        key == "extensions.partialclone"
-            || (key.starts_with("remote.") && key.ends_with(".promisor") && value.eq_ignore_ascii_case("true"))
-    });
     Ok(Identity { branch, oids, config, promisor })
 }
 

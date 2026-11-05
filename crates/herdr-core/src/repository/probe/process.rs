@@ -41,7 +41,19 @@ impl<'a> Budget<'a> {
             .env("GIT_OPTIONAL_LOCKS", "0")
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_NO_LAZY_FETCH", "1")
-            .args(["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"])
+            .env("GIT_SSH_COMMAND", "false")
+            .env("GIT_ASKPASS", "false")
+            .args([
+                "--no-pager",
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "core.sshCommand=false",
+                "-c",
+                "protocol.allow=never",
+            ])
             .arg("-C")
             .arg(&self.repo.root)
             .arg("--git-dir")
