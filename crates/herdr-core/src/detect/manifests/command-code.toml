@@ -1,11 +1,11 @@
 # Screen rules for Command Code (`cmd` CLI, npm package `command-code`).
 # Written for this fork from captured screens; no herdr manifest exists.
-# Known gap: no working rule — a running turn maps to unknown until evidence
-# for a live working footer exists.
+# Command Code 1.88.2–1.88.3: turn footers above the composer and tool
+# permission dialogs are captured alongside trust, draft and idle screens.
 id = "command-code"
-version = "2026.11.04.1"
+version = "2026.11.05.1"
 min_engine_version = 1
-updated_at = "2026-11-04T00:00:00Z"
+updated_at = "2026-11-05T00:00:00Z"
 aliases = ["command_code"]
 
 # The first-run folder-trust dialog: "Do you trust the files in this
@@ -21,6 +21,30 @@ visible_blocker = true
 contains = ["do you trust the files in this folder?", "enter to select", "esc to exit"]
 line_regex = ['^\s*❯?\s*\d+\.\s+(?i:yes|no)\b']
 
+# Tool permissions replace the composer below the last divider. Require
+# the dialog's own wording, a Yes choice and its selection controls; draft
+# text inside a composer is outside this region.
+[[rules]]
+id = "tool_permission_dialog"
+state = "blocked"
+kind = "permission"
+priority = 290
+region = "after_last_horizontal_rule"
+visible_blocker = true
+contains = ["command code needs to", "enter select"]
+line_regex = ['^\s*❯?\s*1\.\s+(?i:yes)\b']
+
+# The live turn footer ends the transcript above the composer, optionally
+# followed by a Tip line. Require that tail position so an older retained
+# footer cannot claim a completed reply. Spinner and activity labels vary.
+[[rules]]
+id = "turn_footer"
+state = "working"
+priority = 200
+region = "above_prompt_box"
+visible_working = true
+regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z']
+
 # The composer box: "❯ <input or placeholder>" between ─ rules, with the
 # "? for shortcuts" hint under it (cmd-composer / cmd-draft fixtures).
 [[rules]]
@@ -33,6 +57,8 @@ contains = ["? for shortcuts"]
 line_regex = ['^\s*❯']
 not = [
   { contains = ["enter to select", "esc to exit"] },
+  { line_regex = ['^\s*[·☆⌘◇○✧]\s+\S.*esc to interrupt\s+•\s+\d'] },
+  { contains = ["enter select"], line_regex = ['^\s*❯?\s*1\.\s+(?i:yes)\b'] },
 ]
 
 # The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows

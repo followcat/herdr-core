@@ -217,7 +217,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   report none. Do not guess status from screen text.
   In the followcat fork, a small allowlist of agents that never speak 7501
   get a screen-inferred status instead (`"source": "screen"` on the record);
-  a native report always wins. After recovery, an inferred root waits for a
+  a native report always wins. Command Code's live turn footer means working;
+  its tool-permission dialog means blocked/permission.
+  After recovery, an inferred root waits for a
   fresh foreground observation before screen evidence can confirm it; without
   confirmation it expires after 30 seconds without counting a turn. Failed
   foreground lookups keep the last observation and emit no change event.

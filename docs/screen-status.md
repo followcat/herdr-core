@@ -88,7 +88,7 @@ state yet, so the rule is unproven (or absent) until a capture exists.
 | `claude` | `claude`, `claude-code`; `@anthropic-ai/claude-code` entrypoints | working incl. foreground shell, blocked, idle (captured); **transcript/menu skip: needs capture** |
 | `codex` | `codex`; `@openai/codex` entrypoints | blocked (captured); **idle, working and real title transitions: needs capture** |
 | `opencode` | `opencode`, `open-code`, `opencode2`, `opencode-ai` | blocked (captured); **working and evidence-backed idle: needs capture** |
-| `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | blocked, idle (captured); **working: needs capture** |
+| `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | working, tool/trust permissions, idle (captured) |
 
 Anything else — shells, editors, one-off tools — is not inferred at all.
 A terminal whose foreground is a plain shell or an unrecognized program has
@@ -183,7 +183,7 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
 
 ## Fork version and updates
 
-This build is `0.1.17-followcat.1` — `0.1.17` plus a fork suffix. The suffix
+This build is `0.1.17-followcat.2` — `0.1.17` plus a fork suffix. The suffix
 works everywhere the version appears (`hc --version`, `server.status`,
 `hello`) and in `hc update --from <binary>`.
 
