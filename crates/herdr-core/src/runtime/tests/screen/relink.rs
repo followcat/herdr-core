@@ -132,7 +132,7 @@ async fn a_pass_in_flight_across_holder_detach_is_rejected() {
     remove_root(&root);
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_holder_that_never_returns_finishes_without_an_inferred_turn() {
     let (core, root, id, act, waiting) = detaching_holder(false);
     let catalog = test_detect_catalog();
@@ -146,21 +146,28 @@ async fn a_holder_that_never_returns_finishes_without_an_inferred_turn() {
     waiting.recv_timeout(Duration::from_secs(5)).unwrap();
     wait_for(&core, |st| st.disconnected.contains_key("fake"));
     for _ in 0..4 {
-        tokio::time::advance(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
         core.screen_status_pass(&catalog).await;
     }
+    assert_eq!(core.lock().events.seq, seq, "no inferred null or turn before restart");
+    core.save(&core.lock());
+    core.flush_saved().await.unwrap();
+    drop(core);
+    // The failed holder's listener is gone. A real fresh-core startup sees
+    // its stale socket, cannot adopt it, and runs ordinary lost accounting.
+    let core = recovery::test_core_at(&root);
     {
-        let mut st = core.lock();
-        assert_eq!(st.events.seq, seq, "no inferred null or turn before finish");
-        core.record_finish(&mut st, id, Exit { code: None, signal: None }, "holder_lost");
+        let st = core.lock();
         let t = &st.reg.terminals[&id];
-        assert_eq!(t.reason.as_deref(), Some("holder_lost"));
-        assert_eq!(t.turn, turn + 1, "only normal finish accounting ends the working turn");
+        assert_eq!(t.reason.as_deref(), Some("stopped_by_restart"));
+        assert_eq!(t.turn, turn + 1, "only ordinary finish accounting ends the working turn");
         assert!(t.news > news);
         assert!(t.status.is_none());
+        assert!(!t.is_live());
     }
     core.screen_status_pass(&catalog).await;
     assert_eq!(core.lock().reg.terminals[&id].turn, turn + 1);
+    core.flush_saved().await.unwrap();
     drop(core);
     remove_root(&root);
 }
