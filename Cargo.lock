@@ -147,6 +147,7 @@ dependencies = [
  "ghostty-vt",
  "libc",
  "regex",
+ "regex-syntax",
  "schemars",
  "serde",
  "serde_json",

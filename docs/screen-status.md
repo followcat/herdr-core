@@ -138,28 +138,38 @@ normal `❯`, shell-input `!` and ASCII `>` prefixes and returns no trust
 evidence if an apparent composer cannot be verified (clipped or unequal
 edges, an unknown prefix, or a remaining shortcuts hint). Without composer
 evidence, the whole input remains eligible. The bundled Command Code
-manifest requires engine 6 so older engines cannot apply its trust rule
-with the less restrictive fallback. Plan and accept-edits change hints,
+manifest requires engine 7, including the prefix matcher below; older
+engines reject it. Plan and accept-edits change hints,
 not the prefix. Folder trust reads only this region.
 A real unboxed TrustPrompt remains visible even without its top divider;
 wrapped title/control phrases are compared across whitespace.
 
-Command Code 1.88.3's built-in activity inventory includes all 74 default
-verbs, eight permission result labels, Executing commands, compaction,
-connection, updater and session naming, settings, permission waits/results,
-submit errors and harness retry/compaction messages. The working rule and idle exclusion use
-identical alternatives, split only to retain the 512-character matcher cap;
-the engine has no named matcher references. Arbitrary mod-provided status
-text is outside this inventory. Known built-in UI shapes can also be
-imitated byte-for-byte; origin cannot be recovered from screen text.
+Engine 7 adds a `prefix` matcher: `{ regex, min_chars, patterns }`. The
+layout regex must name a `prefix` capture; its whitespace is folded to
+single spaces. A complete label matches a configured regular language, or
+its clipped form must have at least `min_chars` Unicode characters and be
+a prefix of a member of that language. Patterns are case-sensitive unless
+they specify flags; positional assertions inside label patterns are
+rejected. The shape regex and both full/prefix programs for each label pattern
+count toward the existing matcher budgets and 512-character source limit. Derived prefix expressions
+are bounded to 16 KiB and compiled programs to 1 MiB per expression.
+
+Command Code 1.88.3's closed English activity inventory includes all 74
+default verbs, permission results, execution, compaction, connection,
+updater/session naming, settings, permission waits, submit errors and
+harness retry messages. Its working rule and idle exclusion use identical
+prefix matchers with a six-character minimum (excluding padding); complete
+short labels such as `Error` remain valid. This accepts any word or
+character cut, including compact-counter gaps of one space. Arbitrary
+mod-provided labels remain outside the inventory. Built-in UI bytes can be
+imitated exactly; screen text cannot recover their origin.
 
 Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
 built-in activity label, and either no suffix, a compact counter (including
 decimals and `k`), or full interrupt controls. All permission allowed/denied
 labels and `Executing: <command>` are supported. A full-footer remainder must
-sit directly after that activity line. The footer must begin with exactly
-one ASCII space, as Status/_G normally renders (the long built-in language
-save error and stream-drop message can overflow that first cell). Cloud
+sit directly after that activity line. The footer starts at column 0 or 1: Ink can remove the leading cell
+when Status overflows, irrespective of its label. Cloud
 waits use ShimmerLine: its icon may shrink to one cell and its text may
 wrap directly to column 2 or 3. AssistantMessage continuation text
 starts at column 2. Turns below 1000ms omit WorkedDurationNote, so a final

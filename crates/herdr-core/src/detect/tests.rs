@@ -626,3 +626,5 @@ mod command_code_narrow;
 mod command_code_renderer;
 #[path = "tests/command_code_round4.rs"]
 mod command_code_round4;
+#[path = "tests/command_code_width.rs"]
+mod command_code_width;

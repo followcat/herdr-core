@@ -4,12 +4,13 @@
 //! Same schema as herdr's manifests; compiled once into matchers and
 //! pre-parsed regions, then shared through `Arc`.
 
+use super::prefix::{Prefix, RawPrefix};
 use super::{Input, State};
 use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Highest `min_engine_version` a manifest may require.
-pub const ENGINE_VERSION: u32 = 6;
+pub const ENGINE_VERSION: u32 = 7;
 
 const MAX_RULES: usize = 128;
 const MAX_GATE_DEPTH: usize = 8;
@@ -79,6 +80,7 @@ struct Gate {
     contains: Vec<String>,
     regex: Vec<Regex>,
     line_regex: Vec<Regex>,
+    prefix: Option<Prefix>,
 }
 
 impl Gate {
@@ -92,6 +94,9 @@ impl Gate {
         let passes = |gate: &Gate| {
             if gate.region.is_some() { gate.matches(text, input) } else { gate.matches_lower(text, lower, input) }
         };
+        if self.prefix.as_ref().is_some_and(|p| !p.matches(text)) {
+            return false;
+        }
         if !self.contains.iter().all(|n| lower.contains(n.as_str())) {
             return false;
         }
@@ -165,6 +170,8 @@ struct RawRule {
     regex: Vec<String>,
     #[serde(default)]
     line_regex: Vec<String>,
+    #[serde(default)]
+    prefix: Option<RawPrefix>,
 }
 
 impl RawRule {
@@ -177,6 +184,7 @@ impl RawRule {
             contains: self.contains.clone(),
             regex: self.regex.clone(),
             line_regex: self.line_regex.clone(),
+            prefix: self.prefix.clone(),
         }
     }
 }
@@ -200,6 +208,8 @@ struct RawGate {
     regex: Vec<String>,
     #[serde(default)]
     line_regex: Vec<String>,
+    #[serde(default)]
+    prefix: Option<RawPrefix>,
 }
 
 fn default_region() -> String {
@@ -244,6 +254,7 @@ impl RawGate {
         !self.contains.is_empty()
             || !self.regex.is_empty()
             || !self.line_regex.is_empty()
+            || self.prefix.is_some()
             || !self.all.is_empty()
             || !self.any.is_empty()
     }
@@ -260,7 +271,10 @@ fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str, n
     if budget.gates > MAX_TOTAL_GATES {
         return Err(format!("over {MAX_TOTAL_GATES} gates total"));
     }
-    let own = gate.contains.len() + gate.regex.len() + gate.line_regex.len();
+    let own = gate.contains.len()
+        + gate.regex.len()
+        + gate.line_regex.len()
+        + gate.prefix.as_ref().map_or(0, |p| 1 + 2 * p.patterns.len());
     if own > MAX_MATCHERS_PER_GATE {
         return Err(format!("{ctx}: {own} matchers, over {MAX_MATCHERS_PER_GATE}"));
     }
@@ -268,7 +282,13 @@ fn validate_gate(gate: &RawGate, depth: usize, budget: &mut Budget, ctx: &str, n
     if budget.matchers > MAX_TOTAL_MATCHERS {
         return Err(format!("over {MAX_TOTAL_MATCHERS} matchers total"));
     }
-    for pat in gate.contains.iter().chain(gate.regex.iter()).chain(gate.line_regex.iter()) {
+    for pat in gate
+        .contains
+        .iter()
+        .chain(gate.regex.iter())
+        .chain(gate.line_regex.iter())
+        .chain(gate.prefix.iter().flat_map(|p| std::iter::once(&p.regex).chain(&p.patterns)))
+    {
         if pat.chars().count() > MAX_MATCHER_CHARS {
             return Err(format!("{ctx}: matcher over {MAX_MATCHER_CHARS} chars"));
         }
@@ -365,6 +385,7 @@ fn compile_gate(raw: &RawGate) -> Result<Gate, String> {
         contains: raw.contains.iter().map(|s| s.to_lowercase()).collect(),
         regex: rx(&raw.regex)?,
         line_regex: rx(&raw.line_regex)?,
+        prefix: raw.prefix.as_ref().map(|p| Prefix::compile(p, MAX_REGEX_PROGRAM)).transpose()?,
     })
 }
 

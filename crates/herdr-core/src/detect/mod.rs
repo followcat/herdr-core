@@ -8,6 +8,7 @@
 pub mod catalog;
 pub mod identify;
 pub mod manifest;
+mod prefix;
 mod regions;
 
 pub use catalog::{Catalog, Limits};
