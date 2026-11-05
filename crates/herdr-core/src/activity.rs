@@ -21,7 +21,7 @@ use crate::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Activity {
@@ -176,23 +176,23 @@ pub(crate) fn observe(t: &mut Terminal, counter: &mut u64, core: &str, epoch: &s
         }
     }
     // Own words only: mutation below must not borrow the terminal's statuses.
-    let words: BTreeMap<String, (Option<String>, String)> = statuses(t)
+    let mut words: BTreeMap<String, (Option<String>, String)> = statuses(t)
         .into_iter()
         .map(|(id, s)| (id, (s.map(|s| s.state.clone()), s.map(|s| s.app.clone()).unwrap_or_default())))
         .collect();
-    let removed: Vec<String> =
-        t.activity.as_ref().unwrap().records.keys().filter(|id| !words.contains_key(*id)).cloned().collect();
-    for id in removed {
-        let Some(revision) = next(counter) else {
-            t.activity = None;
-            return true;
+    let ids: BTreeSet<String> = words.keys().chain(t.activity.as_ref().unwrap().records.keys()).cloned().collect();
+    for id in ids {
+        let Some((word, app)) = words.remove(&id) else {
+            let Some(revision) = next(counter) else {
+                t.activity = None;
+                return true;
+            };
+            let a = t.activity.as_mut().unwrap();
+            a.records.remove(&id);
+            a.revision = revision;
+            t.activity_guard.records.remove(&id);
+            continue;
         };
-        let a = t.activity.as_mut().unwrap();
-        a.records.remove(&id);
-        a.revision = revision;
-        t.activity_guard.records.remove(&id);
-    }
-    for (id, (word, app)) in words {
         let guard = t.activity_guard.records.entry(id.clone()).or_default();
         if !app.is_empty() {
             guard.app = app;

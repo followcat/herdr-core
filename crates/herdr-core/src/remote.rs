@@ -211,6 +211,7 @@ async fn hold(core: &Arc<Core>, m: &Machine, mut d: crate::machines::Dialed) {
     let line = Line::new(frames, &d.hello);
     {
         let mut st = core.lock();
+        mirror::capabilities(core, &mut st, m, &line.features);
         st.lines.insert(m.id.clone(), LineState::Connected(line.clone()));
         for message in st.machine_outbox.remove(&m.id).unwrap_or_default() {
             line.message(&message);

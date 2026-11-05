@@ -12,7 +12,16 @@ fn negotiated_human_releases_deliver_exact_bytes_without_reclaiming_size() {
     let mut s = Session::new();
     s.env.push(("HC_SESSION".into(), "c3-quiet-release".into()));
     let log = s.root.join("input");
-    let t = run(&s, &["sh", "-c", &format!("stty raw -echo; printf ready; cat > '{}'", log.display())]);
+    let t = run(
+        &s,
+        &[
+            "--cwd",
+            s.root.to_str().unwrap(),
+            "sh",
+            "-c",
+            &format!("stty raw -echo; printf ready; cat > '{}'", log.display()),
+        ],
+    );
     wait_until("byte logger ready", || log.exists() && text(&s, &t).contains("ready"));
     let mut idle = Framed::open(&s);
     let hello = idle.call("hello", json!({"framed":true}));

@@ -2,6 +2,30 @@
 
 use super::*;
 
+#[cfg(test)]
+mod compat;
+
+/// A downgraded hello is already enough to invalidate facts. Waiting for its
+/// inventory would leave old Done/checkout facts visible during a stalled call.
+pub(super) fn capabilities(core: &Core, st: &mut State, m: &Machine, features: &[String]) {
+    if ["repository_facts", "record_activity"].iter().all(|wanted| features.iter().any(|f| f == wanted)) {
+        return;
+    }
+    let mut changed = Vec::new();
+    if let Some(records) = st.mirrors.get_mut(&m.id) {
+        for (address, record) in records {
+            let was = record.clone();
+            supported(record, features);
+            if *record != was {
+                changed.push((address.clone(), record.clone(), was));
+            }
+        }
+    }
+    for (address, record, was) in changed {
+        core.deliver(st, "created", &address, record.clone(), &record, Some(&was));
+    }
+}
+
 /// Optional origin facts need support at every hop. Only inspect protocol
 /// envelopes: document values and user labels are opaque.
 pub(super) fn supported(value: &mut Value, features: &[String]) {

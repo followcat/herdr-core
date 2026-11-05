@@ -78,6 +78,19 @@ fn metadata_repetition_named_subtree_removal_and_clocks_ignore_wall_time_and_tur
 }
 
 #[test]
+fn a_clear_orders_the_root_edge_before_lexical_named_removals() {
+    let (mut t, mut counter) = (terminal(), 0);
+    report(&mut t, &mut counter, "", "working");
+    report(&mut t, &mut counter, "build", "working");
+    let before = counter;
+    report(&mut t, &mut counter, "", "clear");
+    let a = t.activity.as_ref().unwrap();
+    assert_eq!(a.records[""].state_ordinal, Some(before + 1));
+    assert_eq!(a.revision, before + 2);
+    assert_eq!(a.records.len(), 1);
+}
+
+#[test]
 fn durable_guards_distinguish_real_work_from_unknown_prehistory_and_replay() {
     let (mut genuine, mut counter) = (terminal(), 0);
     report(&mut genuine, &mut counter, "", "working");
@@ -136,6 +149,34 @@ fn checked_exhaustion_drops_activity_instead_of_wrapping() {
     report(&mut t, &mut counter, "", "working");
     assert!(t.activity.is_none());
     assert_eq!(counter, u64::MAX);
+}
+
+#[test]
+fn maximum_legal_records_have_complete_clocks_and_eviction_removes_only_the_evicted_clock() {
+    let (mut t, mut counter) = (terminal(), u64::MAX - 1024);
+    for n in 0..255 {
+        let id = format!("{n:03}/{}", "a".repeat(124));
+        assert_eq!(id.len(), 128);
+        report(&mut t, &mut counter, &id, "working");
+        report(&mut t, &mut counter, &id, "done");
+    }
+    let a = t.activity.as_ref().unwrap();
+    assert_eq!(a.records.len(), 256);
+    assert!(serde_json::to_vec(a).unwrap().len() > 32 * 1024, "no deferred fence-size cap truncates legal Activity");
+    let evicted = t.records.keys().next().unwrap().clone();
+    report(&mut t, &mut counter, "new", "working");
+    let a = t.activity.as_ref().unwrap();
+    assert_eq!(a.records.len(), 256);
+    assert!(!a.records.contains_key(&evicted));
+    assert_eq!(a.revision, counter);
+    assert!(a.records.contains_key(""));
+    let mut reg = Registry { activity_ordinal: 0, ..Default::default() };
+    reg.terminals.insert(1, t);
+    restore(&mut reg, "host-a", "next-epoch");
+    assert_eq!(
+        reg.activity_ordinal, counter,
+        "resume above every saved record even if the registry counter was missing"
+    );
 }
 
 #[test]
