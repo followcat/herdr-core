@@ -32,7 +32,8 @@ async fn automatic_input_survives_relays_but_not_a_capability_downgrade() {
             config: root.join("config.toml"),
         };
         paths.create_dirs().unwrap();
-        let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+        let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into(), hostname: None })
+            .unwrap();
         let machine = Machine {
             name: "away".into(),
             target: "away".into(),
@@ -41,6 +42,7 @@ async fn automatic_input_survives_relays_but_not_a_capability_downgrade() {
             session: None,
             id: "remote".into(),
             host: "away".into(),
+            hostname: None,
             version: "test".into(),
         };
         let conn = Arc::new(Conn::default());
@@ -145,7 +147,8 @@ async fn failed_reattach_drains_pending_data_before_close() {
         config: root.join("config.toml"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+    let core =
+        Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into(), hostname: None }).unwrap();
     let machine = Machine {
         name: "away".into(),
         target: "away".into(),
@@ -154,6 +157,7 @@ async fn failed_reattach_drains_pending_data_before_close() {
         session: None,
         id: "remote".into(),
         host: "away".into(),
+        hostname: None,
         version: "test".into(),
     };
     let conn = Arc::new(Conn::default());
@@ -217,7 +221,8 @@ fn remote_misses_and_renames_keep_subscribers_on_the_current_machine() {
         config: root.join("config.toml"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+    let core =
+        Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into(), hostname: None }).unwrap();
     let machine = Machine {
         name: "rohan".into(),
         target: "rohan".into(),
@@ -226,6 +231,7 @@ fn remote_misses_and_renames_keep_subscribers_on_the_current_machine() {
         session: None,
         id: "remote".into(),
         host: "rohan".into(),
+        hostname: None,
         version: "test".into(),
     };
     let (tx, mut rx) = mpsc::channel(4);
@@ -311,7 +317,8 @@ fn screen_provenance_survives_the_mirror_and_reconnect_keeps_turns() {
         config: root.join("config.toml"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+    let core =
+        Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into(), hostname: None }).unwrap();
     let machine = Machine {
         name: "away".into(),
         target: "away".into(),
@@ -320,6 +327,7 @@ fn screen_provenance_survives_the_mirror_and_reconnect_keeps_turns() {
         session: None,
         id: "remote".into(),
         host: "away".into(),
+        hostname: None,
         version: "test".into(),
     };
     core.lock().machines.push(machine.clone());

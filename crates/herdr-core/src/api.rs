@@ -14,10 +14,13 @@ use std::time::Duration;
 
 pub const GENERATION: u32 = 1;
 pub const FEATURES: &[&str] =
-    &["framed", "attach", "events", "status", "shell", "resize_notifications", "automatic_input"];
+    &["framed", "attach", "events", "status", "shell", "resize_notifications", "automatic_input", "os_hostname"];
 pub const FINISHED_LINES: usize = 1000;
 /// A terminal's identity: fixed at start from whoever starts it.
 pub const IDENTITY_VARS: &[&str] = &["TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM"];
+
+mod identity;
+use identity::{hello, server_status};
 
 mod doc;
 mod run;
@@ -167,55 +170,6 @@ fn record(core: &Core, id: u32) -> Result<Terminal, RpcError> {
     })?;
     t.waiting_for_person = st.gates.get(&id).is_some_and(|g| g.waiting_for_person);
     Ok(t)
-}
-
-async fn hello(core: Ctx<'_>, p: HelloParams) -> Result<HelloResult, RpcError> {
-    if let Some(g) = p.generation.filter(|g| *g != GENERATION) {
-        return Err(RpcError::new(
-            "unsupported_generation",
-            format!("protocol generation {g} not supported"),
-            format!("this core speaks generation {GENERATION}"),
-        ));
-    }
-    Ok(HelloResult {
-        generation: GENERATION,
-        version: version(),
-        core: core.info.clone(),
-        framed: p.framed,
-        methods: METHOD_NAMES.iter().map(|m| m.to_string()).collect(),
-        features: FEATURES.iter().map(|f| f.to_string()).collect(),
-    })
-}
-
-async fn server_status(core: Ctx<'_>, _: Empty) -> Result<StatusResult, RpcError> {
-    let st = core.lock();
-    let live = st.reg.terminals.values().filter(|t| t.is_live()).count();
-    let holders: Vec<HolderInfo> = st
-        .holders
-        .iter()
-        .map(|l| HolderInfo {
-            pid: l.pid,
-            instance: l.instance.clone(),
-            current: l.current,
-            terminals: st
-                .reg
-                .terminals
-                .values()
-                .filter(|t| t.is_live() && t.holder.as_ref() == Some(&l.instance))
-                .count(),
-        })
-        .collect();
-    Ok(StatusResult {
-        core: core.info.clone(),
-        version: version(),
-        pid: std::process::id(),
-        uptime_ms: core.started.elapsed().as_millis() as u64,
-        holder: holders.iter().find(|h| h.current).cloned(),
-        holders,
-        live,
-        finished: st.reg.terminals.len() - live,
-        installed_by: crate::client::installed_by().map(String::from),
-    })
 }
 
 async fn server_stop(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
@@ -653,6 +607,7 @@ async fn machine_add(core: Ctx<'_>, p: MachineAddParams) -> Result<crate::machin
         session: p.session,
         id: text("id"),
         host: text("name"),
+        hostname: hello["core"]["hostname"].as_str().filter(|s| !s.is_empty()).map(String::from),
         version: hello["version"].as_str().unwrap_or_default().into(),
     };
     if machine.id == core.info.id {

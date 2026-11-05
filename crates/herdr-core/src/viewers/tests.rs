@@ -16,7 +16,8 @@ fn resize_drags_serialize_nothing_without_observers_and_only_latest_when_stalled
         config: root.join("config.toml"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, crate::api::CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core =
+        Core::start(paths, crate::api::CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     let id = {
         let mut st = core.lock();
         let id = st

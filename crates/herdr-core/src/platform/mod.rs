@@ -15,10 +15,20 @@ mod unix_repository;
 #[cfg(unix)]
 pub use unix_repository::*;
 
+#[cfg(unix)]
+mod unix_identity;
+#[cfg(unix)]
+pub use unix_identity::*;
+
 #[cfg(windows)]
 mod windows_repository;
 #[cfg(windows)]
 pub use windows_repository::*;
+
+#[cfg(windows)]
+mod windows_identity;
+#[cfg(windows)]
+pub use windows_identity::*;
 
 #[cfg(target_os = "linux")]
 pub mod systemd;

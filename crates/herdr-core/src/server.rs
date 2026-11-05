@@ -125,11 +125,11 @@ fn load_identity(state: &Path, machine_id: Option<String>) -> io::Result<CoreInf
                     return Err(io::Error::new(e.kind(), format!("forgetting the copied {name}: {e}")));
                 }
             }
-            CoreInfo { id: platform::random_hex(), name: hostname() }
+            CoreInfo { id: platform::random_hex(), name: hostname(), hostname: None }
         }
         Some(saved) if saved.machine_id == machine_id || machine_id.is_none() => return Ok(saved.info),
         Some(saved) => saved.info,
-        None => CoreInfo { id: platform::random_hex(), name: hostname() },
+        None => CoreInfo { id: platform::random_hex(), name: hostname(), hostname: None },
     };
     let identity = Identity { info, machine_id };
     crate::paths::write_atomic(&path, &serde_json::to_vec_pretty(&identity).map_err(io::Error::other)?)?;

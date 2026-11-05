@@ -38,6 +38,13 @@
       },
       "CoreInfo": {
         "properties": {
+          "hostname": {
+            "description": "OS hostname observed for this reply, independent of the saved display name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "description": "Permanent random id, reset only when state is wiped.",
             "type": "string"
@@ -470,8 +477,15 @@
       "Machine": {
         "properties": {
           "host": {
-            "description": "What that core calls itself (its hostname).",
+            "description": "What that core calls itself (its display name).",
             "type": "string"
+          },
+          "hostname": {
+            "description": "Last OS hostname actually received on handshake; the line state qualifies freshness.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "description": "The other core's permanent id.",
@@ -534,8 +548,15 @@
         "description": "A machine as `machine ls` and `ls` show it: its profile and its line now.",
         "properties": {
           "host": {
-            "description": "What that core calls itself (its hostname).",
+            "description": "What that core calls itself (its display name).",
             "type": "string"
+          },
+          "hostname": {
+            "description": "Last OS hostname actually received on handshake; the line state qualifies freshness.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "description": "The other core's permanent id.",

@@ -20,6 +20,15 @@ protocol generation, decided on purpose.
 
 ## Connecting
 
+The followcat fork adds optional `core.hostname` to hello/server.status, independently
+of the saved `core.name`. It is an OS observation for that reply, with OS spelling;
+failure omits it. `os_hostname` in hello.features advertises support. Outgoing core
+handshakes include the same observation. `machine.list` and `terminal.list.machines`
+may include `hostname`, the last observed peer hostname, qualified by their existing
+line state. Reconnection replaces or clears it; `host` and local aliases retain their
+old meanings. Existing clients ignore the optional field; clients on older peers
+keep their previous display-name fallback. No hostname change notification is added.
+
 On Unix, core listens on a Unix socket; on Windows, it uses a named pipe.
 See [endpoint rules](../docs/security.md#state-and-endpoints) for default paths,
 fallbacks, and overrides. `hc connect` speaks the same protocol over

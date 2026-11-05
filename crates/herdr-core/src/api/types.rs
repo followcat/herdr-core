@@ -15,6 +15,15 @@ pub struct CoreInfo {
     pub id: String,
     /// Display name, the hostname by default.
     pub name: String,
+    /// OS hostname observed for this reply, independent of the saved display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+}
+
+impl CoreInfo {
+    pub fn observed(&self) -> Self {
+        Self { hostname: crate::platform::observed_hostname(), ..self.clone() }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]

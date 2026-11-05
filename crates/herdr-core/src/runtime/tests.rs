@@ -129,7 +129,7 @@ fn test_core() -> (Arc<Core>, PathBuf) {
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     (core, root)
 }
 
@@ -185,7 +185,7 @@ fn a_blocked_registry_write_does_not_hold_the_core_lock() {
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while !core.paths.state.join("terminals.json").exists() {
         assert!(Instant::now() < deadline, "startup registry was not written");
@@ -239,7 +239,7 @@ fn a_new_holder_of_another_build_reports_both_identities() {
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     let (stream, mut holder) = UnixStream::pair().unwrap();
     let fake = std::thread::spawn(move || {
         assert_eq!(proto::read(&mut holder).unwrap().unwrap().0, proto::HELLO);
@@ -279,7 +279,7 @@ fn on_fake_holder(root: &std::path::Path, answers: &[&str]) -> (Arc<Core>, u32, 
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     let id = {
         let mut st = core.lock();
         let new = crate::terminals::NewTerminal { argv: vec!["sh".into()], ..Default::default() };
@@ -420,7 +420,7 @@ async fn waiting_for_holder_start_does_not_block_the_core_executor() {
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
     let (ready, entered) = mpsc::channel();
     let (release, wait) = mpsc::channel();
     let c = core.clone();

@@ -140,7 +140,7 @@ pub(super) fn test_core_at(root: &std::path::Path) -> Arc<Core> {
         holder_socket: root.join("run/core.holder.sock"),
     };
     paths.create_dirs().unwrap();
-    Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap()
+    Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap()
 }
 
 #[cfg(unix)]

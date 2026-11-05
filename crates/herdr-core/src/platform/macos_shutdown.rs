@@ -264,7 +264,7 @@ mod tests {
             holder_socket: root.join("holder.sock"),
         };
         paths().create_dirs().unwrap();
-        let info = || CoreInfo { id: "test".into(), name: "test".into() };
+        let info = || CoreInfo { id: "test".into(), name: "test".into(), hostname: None };
         let core = Core::start(paths(), info()).unwrap();
         for killed in [false, true] {
             let mut child = std::process::Command::new("sh")

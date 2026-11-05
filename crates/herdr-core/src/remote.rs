@@ -22,6 +22,7 @@ type Sink = (Arc<Conn>, u32);
 /// A pending reply, its stream sink and whether resize support is required.
 type Waiting = (oneshot::Sender<Value>, Option<(Sink, bool)>);
 
+mod identity;
 mod viewers;
 #[cfg(test)]
 use viewers::automatic_input;
@@ -257,21 +258,14 @@ async fn supervise(core: Arc<Core>, id: String) {
             st.lines.insert(id.clone(), state);
             core.changed.notify_waiters();
         };
-        let hello = json!({"framed": true, "core": core.info, "calls_you": m.name, "features": crate::api::FEATURES});
+        let hello = json!({"framed": true, "core": core.info.observed(), "calls_you": m.name, "features": crate::api::FEATURES});
         match crate::machines::dial(&core.paths, m.reach(), m.session.as_deref(), hello).await {
             Ok(d) if d.hello["core"]["id"] != m.id.as_str() => {
                 down(&mut core.lock(), format!("a different core answers there ({})", d.hello["core"]["id"]));
             }
             Ok(d) => {
                 backoff = Duration::from_millis(250);
-                // It may have been updated since it was added.
-                if let Some(v) = d.hello["version"].as_str().filter(|v| *v != m.version) {
-                    let mut st = core.lock();
-                    if let Some(saved) = st.machines.iter_mut().find(|x| x.id == id) {
-                        saved.version = v.into();
-                    }
-                    crate::machines::save(&core.paths.state, &st.machines);
-                }
+                identity::refresh(&core, &id, &d.hello);
                 hold(&core, &m, d).await;
                 // Dial again at once: most drops are a restart there. Calls meanwhile
                 // wait for that dial instead of failing; only a failed one is "down".

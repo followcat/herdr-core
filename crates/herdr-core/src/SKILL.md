@@ -7,6 +7,11 @@ terminal multiplexer.
 
 `hc` runs programs in persistent terminals. People can attach and take over.
 It does not arrange windows; use `herdr-app --skill` for that.
+
+The followcat fork's API exposes optional `core.hostname` in hello/server.status,
+separately from the saved display `core.name`. Remote machine records may retain
+their last observed OS hostname, qualified by line state; aliases keep their meaning.
+An absent hostname is unknown, not an invitation to infer one from the display name.
 `$HC_TERMINAL_ID` is your address. Terminals you start are your children.
 They end when you end, unless started with `--outlive-parent`.
 `<t>` below means an ID (`t7`), a name (`review`), or `machine/t7`.

@@ -27,8 +27,11 @@ pub struct Machine {
     pub session: Option<String>,
     /// The other core's permanent id.
     pub id: String,
-    /// What that core calls itself (its hostname).
+    /// What that core calls itself (its display name).
     pub host: String,
+    /// Last OS hostname actually received on handshake; the line state qualifies freshness.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
     /// Its hc version when last seen.
     pub version: String,
 }
