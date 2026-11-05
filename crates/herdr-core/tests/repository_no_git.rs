@@ -32,13 +32,71 @@ fn absent_git_keeps_a_bounded_loose_head_branch_and_recovers_after_revalidation(
             (65, "0123456789012345678901234567890123456789\n"),
             (70, "ref: refs/heads/../invalid\n"),
             (71, "ref: refs/heads/\n"),
+            (72, "ref: refs/heads/main.lock\n"),
+            (73, "ref: refs/heads/a:b\n"),
         ] {
             fs::write(root.join(".git/HEAD"), head).unwrap();
             let facts = probe.refresh(&repo, now + Duration::from_secs(offset)).unwrap();
             assert!(facts.branch.is_none() && facts.ahead_behind.is_none());
         }
+        // Validate all check-ref-format rules without invoking Git in the fallback.
+        // Interior dots, Unicode, punctuation outside Git's forbidden set, and
+        // a dash in a full branch ref are valid (this is not porcelain --branch).
+        for (index, name) in [
+            "a//b",
+            ".hidden",
+            "a/.hidden/b",
+            "a.lock/b",
+            "a.",
+            "a..b",
+            "a@{b",
+            "a b",
+            "a\tb",
+            "a\u{7f}b",
+            "a~b",
+            "a^b",
+            "a?b",
+            "a*b",
+            "a[b",
+            "a\\b",
+            "a/b/",
+        ]
+        .iter()
+        .enumerate()
+        {
+            fs::write(root.join(".git/HEAD"), format!("ref: refs/heads/{name}\n")).unwrap();
+            assert!(
+                probe.refresh(&repo, now + Duration::from_secs(80 + index as u64)).unwrap().branch.is_none(),
+                "{name}"
+            );
+        }
+        for (index, name) in
+            ["feature/main", "a./b", "topic.LOCK", "a@b", "@", "-topic", "开发/分支", "topic "].iter().enumerate()
+        {
+            fs::write(root.join(".git/HEAD"), format!("ref: refs/heads/{name}\n")).unwrap();
+            assert_eq!(
+                probe.refresh(&repo, now + Duration::from_secs(120 + index as u64)).unwrap().branch.as_deref(),
+                Some(*name),
+                "{name}"
+            );
+        }
+        for (index, (head, branch)) in [
+            ("ref:refs/heads/main\n", Some("main")),
+            ("ref:\trefs/heads/main\n", Some("main")),
+            ("ref:\u{b}refs/heads/main\u{b}\n", None),
+            (" ref: refs/heads/main\n", None),
+        ]
+        .iter()
+        .enumerate()
+        {
+            fs::write(root.join(".git/HEAD"), head).unwrap();
+            assert_eq!(
+                probe.refresh(&repo, now + Duration::from_secs(140 + index as u64)).unwrap().branch.as_deref(),
+                *branch
+            );
+        }
         fs::write(root.join(".git/HEAD"), "x".repeat(64 * 1024 + 1)).unwrap();
-        assert!(probe.refresh(&repo, now + Duration::from_secs(75)).is_err(), "fallback retains the HEAD read bound");
+        assert!(probe.refresh(&repo, now + Duration::from_secs(150)).is_err(), "fallback retains the HEAD read bound");
         return;
     }
     let mut s = Session::new();

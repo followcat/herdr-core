@@ -109,7 +109,7 @@ fn observe(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Path
 
 fn loose_head(repo: &Repository) -> io::Result<Facts> {
     let branch = small_file(&repo.git_dir.join("HEAD"))?.and_then(|head| {
-        let name = head.trim().strip_prefix("ref: ")?;
+        let name = head.trim_ascii_end().strip_prefix("ref:")?.trim_ascii_start();
         let branch = name.strip_prefix("refs/heads/")?;
         (!branch.is_empty() && valid_ref(name)).then(|| branch.into())
     });
@@ -225,7 +225,14 @@ fn map_ref(spec: &str, name: &str) -> Option<String> {
 }
 
 fn valid_ref(name: &str) -> bool {
-    name.starts_with("refs/") && !name.contains("..") && !name.bytes().any(|b| b <= b' ' || b == 127 || b == b'\\')
+    // check-ref-format for a complete refs/... name, without normalization,
+    // refspec-pattern or allow-onelevel relaxations. No Git child is needed.
+    name.starts_with("refs/")
+        && !name.ends_with('.')
+        && !name.contains("..")
+        && !name.contains("@{")
+        && !name.bytes().any(|b| b <= b' ' || b == 127 || b"~^:?*[\\".contains(&b))
+        && name.split('/').all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
 }
 
 fn oid_pair(bytes: &[u8]) -> Option<(String, String)> {
@@ -272,4 +279,56 @@ fn current(previous: &[Stamp]) -> io::Result<bool> {
         }
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod ref_tests {
+    use super::valid_ref;
+
+    #[test]
+    fn full_ref_format_obeys_all_git_rules_without_normalization() {
+        for name in [
+            "refs/heads/main",
+            "refs/heads/a./b",
+            "refs/heads/topic.LOCK",
+            "refs/heads/-topic",
+            "refs/heads/@",
+            "refs/heads/a@b",
+            "refs/heads/a{b}",
+            "refs/heads/开发/分支",
+            "refs/heads/topic\u{2003}",
+            "refs/remotes/origin/main",
+            "refs/tags/v1.2",
+        ] {
+            assert!(valid_ref(name), "valid full ref: {name:?}");
+        }
+        for name in [
+            "main",
+            "refs",
+            "refs/",
+            "refs//heads/main",
+            "refs/heads/main/",
+            "refs/heads/.main",
+            "refs/heads/main/.hidden",
+            "refs/heads/a.lock/main",
+            "refs/heads/main.lock",
+            "refs/heads/a..b",
+            "refs/heads/main.",
+            "refs/heads/a:b",
+            "refs/heads/a~b",
+            "refs/heads/a^b",
+            "refs/heads/a?b",
+            "refs/heads/a*b",
+            "refs/heads/a[b",
+            "refs/heads/a\\b",
+            "refs/heads/a@{b",
+            "refs/heads/a b",
+            "refs/heads/a\tb",
+            "refs/heads/a\nb",
+            "refs/heads/a\u{7f}b",
+            "refs/heads/a\0b",
+        ] {
+            assert!(!valid_ref(name), "invalid full ref: {name:?}");
+        }
+    }
 }

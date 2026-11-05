@@ -65,6 +65,10 @@ The same bounded loose-HEAD fallback applies on Unix if Git cannot be spawned (i
 missing/non-executable Git). It reports only the readable symbolic branch, with unknown counts;
 detached/malformed HEAD is unknown and oversized HEAD is rejected. It does not mask errors
 from a Git child that did run. Cached fallback facts retry Git on the 60-second revalidation.
+Symbolic fallback refs obey the complete `git check-ref-format refs/heads/<name>` rules, without
+normalization or refspec-pattern relaxations: forbidden components, `.lock` suffixes, punctuation,
+control bytes, `..`, `@{`, duplicate/trailing slashes and a trailing dot are rejected. Valid
+Unicode names are preserved. HEAD whitespace handling follows Git's ASCII rules.
 
 The scheduler uses observed foreground cwd, otherwise launch cwd. It examines at most 64
 terminals every 250 ms, with two fixed IO workers, at most two jobs started per second, one job
