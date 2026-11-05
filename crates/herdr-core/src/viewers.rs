@@ -232,6 +232,7 @@ impl Core {
         }
         let word = |st: &State| st.reg.terminals[&id].status.as_ref().map(|s| s.state.clone());
         let was = word(st);
+        let mut recovery_withdrawal = false;
         let change = match verdict {
             Some((state, kind)) => {
                 // An accepted verdict re-proves a restored root: the marker
@@ -244,9 +245,13 @@ impl Core {
             None => {
                 // A withdrawal also ends the unconfirmed window — under it the
                 // root drops without a turn: nothing fresh ever proved it.
-                let unconfirmed = st.screen_status.get_mut(&id).and_then(|w| w.unconfirmed_until.take()).is_some();
+                recovery_withdrawal = st.screen_status.get_mut(&id).and_then(|w| w.unconfirmed_until.take()).is_some();
                 let t = st.reg.terminals.get_mut(&id).expect("live terminal");
-                if unconfirmed { crate::status::withdraw_unconfirmed(t) } else { crate::status::withdraw_inferred(t) }
+                if recovery_withdrawal {
+                    crate::status::withdraw_unconfirmed(t)
+                } else {
+                    crate::status::withdraw_inferred(t)
+                }
             }
         };
         if change == crate::status::Change::default() {
@@ -260,7 +265,9 @@ impl Core {
             gate.clear_draft();
         }
         self.status_changed(st, id, change);
-        if now != was { self.save(st) } else { self.save_soon() }
+        // Recovery withdrawals can arrive for many terminals at once. One
+        // bounded deferred checkpoint covers the burst on either expiry path.
+        if now != was && !recovery_withdrawal { self.save(st) } else { self.save_soon() }
     }
 
     pub fn status_changed(&self, st: &mut State, id: u32, change: crate::status::Change) {

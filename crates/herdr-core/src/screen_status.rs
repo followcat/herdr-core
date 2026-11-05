@@ -118,15 +118,25 @@ impl Core {
             // Disabled/empty detection can never collect or confirm, but
             // adoption may restore another root at any time. Keep expiring
             // those roots, and retry gated withdrawals on later ticks.
-            let mut st = self.lock();
-            let expired: Vec<u32> = st
-                .screen_status
-                .iter()
-                .filter(|(_, w)| w.unconfirmed_until.is_some_and(|at| at <= Instant::now()))
-                .map(|(id, _)| *id)
-                .collect();
+            let expired: Vec<u32> = {
+                let st = self.lock();
+                let now = Instant::now();
+                st.screen_status
+                    .iter()
+                    .filter(|(id, w)| {
+                        !st.screen_detection_frozen(**id) && w.unconfirmed_until.is_some_and(|at| at <= now)
+                    })
+                    .map(|(id, _)| *id)
+                    .collect()
+            };
             for id in expired {
-                self.inferred_status(&mut st, id, None);
+                {
+                    let mut st = self.lock();
+                    self.expire_screen_status(&mut st, id);
+                }
+                // Let RPCs/other tasks run between roots, without retaining
+                // the global mutex or serializing the registry for each one.
+                tokio::task::yield_now().await;
             }
             return;
         }
@@ -171,6 +181,17 @@ impl Core {
         out
     }
 
+    /// One deadline decision shared by collection, commit and expiry-only
+    /// passes. A gated root retains its deadline for the next eligible pass.
+    fn expire_screen_status(&self, st: &mut State, id: u32) -> bool {
+        let expired =
+            st.screen_status.get(&id).and_then(|w| w.unconfirmed_until).is_some_and(|at| at <= Instant::now());
+        if expired {
+            self.inferred_status(st, id, None);
+        }
+        expired
+    }
+
     /// One terminal's step, under the caller's lock: eligibility, the
     /// unchanged-screen confirm, or an owned snapshot for the off-lock pass.
     fn step(&self, st: &mut State, id: u32, catalog: &Catalog) -> Option<Snap> {
@@ -195,8 +216,7 @@ impl Core {
         // A restored root past its re-proof deadline is withdrawn. Checked
         // before every gate below so it fires while stitching, under
         // synchronized output, and on terminals not snapshotted this pass.
-        if st.screen_status.get(&id).and_then(|w| w.unconfirmed_until).is_some_and(|at| at <= Instant::now()) {
-            self.inferred_status(st, id, None);
+        if self.expire_screen_status(st, id) {
             return None;
         }
         if st.screen_status.get(&id).is_some_and(|w| w.unconfirmed_until.is_some() && !w.foreground_observed) {
@@ -275,14 +295,12 @@ impl Core {
     /// us) or the terminal went ineligible. Applies at most one change.
     pub(crate) fn screen_status_commit(&self, catalog: &Catalog, snap: Snap, detection: Detection) {
         let mut st = self.lock();
-        let Some(t) = st.reg.terminals.get(&snap.id) else { return };
-        // Matching may have started before the recovery deadline and finished
-        // after it. Expiry wins under this same commit lock; the inferred
-        // mutation gate still preserves detached/frozen terminals.
-        if st.screen_status.get(&snap.id).and_then(|w| w.unconfirmed_until).is_some_and(|at| at <= Instant::now()) {
-            self.inferred_status(&mut st, snap.id, None);
+        // An expired recovery root loses even to a previously collected
+        // positive verdict. The same mutation gate preserves detached roots.
+        if self.expire_screen_status(&mut st, snap.id) {
             return;
         }
+        let Some(t) = st.reg.terminals.get(&snap.id) else { return };
         let agent = t.foreground.as_ref().and_then(|f| f.agent);
         let now = Token {
             program: t.pid.map(|pid| (pid, t.program_started_ms)),

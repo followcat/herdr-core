@@ -1,6 +1,8 @@
 use super::*;
 
 #[cfg(unix)]
+mod expiry;
+#[cfg(unix)]
 mod live_foreground;
 mod recovery;
 #[cfg(unix)]

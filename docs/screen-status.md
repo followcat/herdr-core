@@ -147,7 +147,10 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   exactly like a native status clearing does. Disabled detection and an empty
   catalog keep an expiry-only worker alive, including across detached holders
   and later adoptions. An agent dropped from a non-empty catalog withdraws
-  the same quiet way once its foreground is freshly observed.
+  the same quiet way once its foreground is freshly observed. Recovery
+  withdrawals coalesce into deferred checkpoints within two seconds;
+  empty-catalog passes release the state lock and yield between terminals.
+  Normal expiry also defers persistence rather than serializing per root.
 - **Failed foreground lookups are unknown.** A missing link, timeout or
   malformed reply, any nonpositive pgid (including older holders' -1 OS
   errors), or unavailable Unix process metadata keeps the last observed
