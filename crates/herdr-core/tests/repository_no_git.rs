@@ -84,6 +84,9 @@ fn absent_git_keeps_a_bounded_loose_head_branch_and_recovers_after_revalidation(
             ("ref:refs/heads/main\n", Some("main")),
             ("ref:\trefs/heads/main\n", Some("main")),
             ("ref:\u{b}refs/heads/main\u{b}\n", None),
+            ("ref: refs/heads/main\u{c}\n", None),
+            ("ref:\u{c}refs/heads/main\n", None),
+            ("ref: refs/heads/main \t\r\n", Some("main")),
             (" ref: refs/heads/main\n", None),
         ]
         .iter()

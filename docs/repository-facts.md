@@ -68,7 +68,8 @@ from a Git child that did run. Cached fallback facts retry Git on the 60-second 
 Symbolic fallback refs obey the complete `git check-ref-format refs/heads/<name>` rules, without
 normalization or refspec-pattern relaxations: forbidden components, `.lock` suffixes, punctuation,
 control bytes, `..`, `@{`, duplicate/trailing slashes and a trailing dot are rejected. Valid
-Unicode names are preserved. HEAD whitespace handling follows Git's ASCII rules.
+Unicode names are preserved. HEAD trimming accepts only space, tab, LF and CR, as Git does;
+form feed and vertical tab remain invalid ref characters.
 
 The scheduler uses observed foreground cwd, otherwise launch cwd. It examines at most 64
 terminals every 250 ms, with two fixed IO workers, at most two jobs started per second, one job

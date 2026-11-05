@@ -108,8 +108,9 @@ fn observe(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Path
 }
 
 fn loose_head(repo: &Repository) -> io::Result<Facts> {
+    const HEAD_SPACE: &[char] = &[' ', '\t', '\n', '\r'];
     let branch = small_file(&repo.git_dir.join("HEAD"))?.and_then(|head| {
-        let name = head.trim_ascii_end().strip_prefix("ref:")?.trim_ascii_start();
+        let name = head.trim_end_matches(HEAD_SPACE).strip_prefix("ref:")?.trim_start_matches(HEAD_SPACE);
         let branch = name.strip_prefix("refs/heads/")?;
         (!branch.is_empty() && valid_ref(name)).then(|| branch.into())
     });
