@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(unix)]
+mod fresh_foreground;
+
 // --- recovery: adoption, the unconfirmed window and the freeze (fork) -----
 
 /// Re-adopts `id` onto a fresh fake holder that claims to hold it — the way
@@ -39,7 +42,13 @@ fn adopt_onto(core: &Arc<Core>, root: &std::path::Path, id: u32, previous: &str,
 /// `Foreground.agent` is `None` (the field never reaches disk). The fake
 /// keeps the link open like `adopt_onto`'s.
 #[cfg(unix)]
-fn restart_on_fake_holder(root: &std::path::Path, id: u32, previous: &str, tail: &[u8]) -> Arc<Core> {
+fn restart_on_fake_holder(
+    root: &std::path::Path,
+    id: u32,
+    previous: &str,
+    tail: &[u8],
+    foreground: Option<i32>,
+) -> Arc<Core> {
     let held = proto::HeldTerminal { id, pid: 4321, cols: 80, rows: 24, exit: None };
     let welcome = proto::Welcome {
         version: proto::VERSION,
@@ -59,7 +68,19 @@ fn restart_on_fake_holder(root: &std::path::Path, id: u32, previous: &str, tail:
             return;
         }
         let _ = io::Write::write_all(&mut stream, &answer);
-        while let Ok(Some(_)) = proto::read(&mut stream) {}
+        while let Ok(Some((kind, id, _))) = proto::read(&mut stream) {
+            if kind == proto::FOREGROUND
+                && let Some(pgid) = foreground
+            {
+                let _ = io::Write::write_all(
+                    &mut stream,
+                    &proto::json_frame(proto::FOREGROUND_IS, id, &proto::Foreground { pgid }),
+                );
+            } else if kind == proto::GOODBYE {
+                let _ = io::Write::write_all(&mut stream, &proto::frame(proto::BYE, 0, &[]));
+                break;
+            }
+        }
     });
     test_core_at(root)
 }
@@ -98,7 +119,7 @@ async fn restarted_root(root: &std::path::Path, tail: &[u8]) -> (Arc<Core>, u32)
         std::thread::sleep(Duration::from_millis(1));
     }
     drop(core);
-    let core = restart_on_fake_holder(root, id, "crash", tail);
+    let core = restart_on_fake_holder(root, id, "crash", tail, None);
     {
         let st = core.lock();
         let t = &st.reg.terminals[&id];
@@ -332,6 +353,7 @@ async fn a_restored_root_is_confirmed_by_a_fresh_verdict_silently() {
         assert!(st.screen_status[&id].unconfirmed_until.is_some(), "the restored root waits for proof");
         assert!(st.reg.terminals[&id].status_available(), "it still counts for waits meanwhile");
     }
+    watch_sees(&core, id, agent("devin"));
     // The screen proves it again with the same word: the marker clears, but
     // nothing publishes — no turn, no event.
     core.screen_status_pass(&catalog).await;
@@ -421,6 +443,7 @@ async fn an_unconfirmed_restored_root_is_still_waitable() {
     });
     tokio::task::yield_now().await;
     tokio::task::yield_now().await;
+    watch_sees(&core, id, agent("devin"));
     // A positive verdict re-proves it quietly: still working, wait holds.
     core.output(&mut core.lock(), id, b"output the old screen would not have\r\n");
     core.screen_status_pass(&catalog).await;
@@ -444,6 +467,7 @@ async fn a_restored_root_is_withdrawn_when_its_agent_left_the_catalog() {
     core.screen_status_pass(&test_detect_catalog()).await;
     adopt_onto(&core, &root, id, "crash", b"WORKING NOW\r\n");
     assert!(core.lock().screen_status[&id].unconfirmed_until.is_some());
+    watch_sees(&core, id, agent("devin"));
     // Configured down to claude only: nothing here can re-prove devin's root.
     let catalog = crate::detect::Catalog::load(
         None,

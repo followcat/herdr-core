@@ -130,7 +130,9 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   re-arms inference for the new program.
 - **A restored inferred root is unconfirmed.** A `source:"screen"` root that
   survives adoption stays visible (waits still see it) but must be re-proven:
-  a fresh accepted verdict — `working`, `blocked`, or `idle` after its normal
+  the watcher must first observe its current foreground after adoption; saved
+  process names and arguments alone cannot confirm or withdraw it. Then a
+  fresh accepted verdict — `working`, `blocked`, or `idle` after its normal
   settle — from a post-restart snapshot clears the mark. Re-confirming the
   same state and kind is a no-op: no event, no turn. `unknown` evidence and
   skipped snapshots neither confirm nor extend the deadline.

@@ -85,6 +85,12 @@ async fn a_holder_detach_relink_gates_ticks_then_reconfirms_silently() {
     act.send(()).unwrap();
     wait_for(&core, |st| st.link(id).is_some());
     assert!(core.lock().screen_status[&id].unconfirmed_until.is_some());
+    // Model the first actual observation after this adoption.
+    {
+        let mut st = core.lock();
+        let was = st.reg.terminals[&id].foreground.clone();
+        core.foreground_changed(&mut st, id, was.as_ref());
+    }
     core.screen_status_pass(&catalog).await;
     {
         let st = core.lock();

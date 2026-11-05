@@ -22,6 +22,9 @@ use tokio::time::{Duration, Instant};
 pub struct ScreenWatch {
     /// Its holder detached; keep the last root until adoption or finish.
     pub(crate) detached: bool,
+    /// A real foreground observation in this adoption's lifetime. Saved
+    /// name/argv are only hints until the watcher has looked at the process.
+    pub(crate) foreground_observed: bool,
     /// The `output_seq` whose snapshot was last evaluated to a verdict.
     last_seq: Option<u64>,
     /// When the current run of idle evidence began; `settle` runs from here.
@@ -30,7 +33,7 @@ pub struct ScreenWatch {
     /// The invalidation generation. Part of the commit token, so a snapshot
     /// taken before a bump dies at commit even when its other fields happen
     /// to match again — a resize there and back, a foreground A→B→A.
-    generation: u64,
+    pub(crate) generation: u64,
     /// A root status restored from disk stands unconfirmed until a verdict
     /// from a post-adoption snapshot re-proves it; past this it is
     /// withdrawn. Not touched by `invalidate`: the deadline never extends,
@@ -191,6 +194,9 @@ impl Core {
             self.inferred_status(st, id, None);
             return None;
         }
+        if st.screen_status.get(&id).is_some_and(|w| w.unconfirmed_until.is_some() && !w.foreground_observed) {
+            return None;
+        }
         if !live || agent.is_none() {
             // Gone or no supported agent in front: whatever the
             // screen said about the old program is withdrawn — never "done".
@@ -276,6 +282,7 @@ impl Core {
         };
         let eligible = t.is_live()
             && !t.reported
+            && st.screen_status.get(&snap.id).is_none_or(|w| w.unconfirmed_until.is_none() || w.foreground_observed)
             && !st.screen_detection_frozen(snap.id)
             && !st.stitching.contains(&snap.id)
             && agent.is_some()
@@ -331,6 +338,10 @@ impl Core {
     /// leader-pid change drops cached work and withdraws the old owner's
     /// verdict — process loss never means "done". A cwd move alone keeps both.
     pub(crate) fn foreground_changed(&self, st: &mut State, id: u32, was: Option<&Foreground>) {
+        if !st.reg.terminals.contains_key(&id) {
+            return;
+        }
+        st.screen_status.entry(id).or_default().foreground_observed = true;
         let key = |f: Option<&Foreground>| f.map(|f| (f.pid, f.agent));
         if key(was) == key(st.reg.terminals.get(&id).and_then(|t| t.foreground.as_ref())) {
             return;

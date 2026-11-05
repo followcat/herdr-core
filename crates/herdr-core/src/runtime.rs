@@ -136,6 +136,7 @@ impl State {
             let watch = self.screen_status.entry(t.id()).or_default();
             watch.invalidate();
             watch.detached = true;
+            watch.foreground_observed = false;
         }
         let at = self.holders.iter().position(|l| l.instance == instance)?;
         Some(self.holders.remove(at))
@@ -540,7 +541,9 @@ impl Core {
             // staleness axes bump. An inferred root the registry kept stands
             // unconfirmed until a verdict from this screen re-proves it.
             st.invalidate_screen(id);
-            st.screen_status.get_mut(&id).expect("invalidated").detached = false;
+            let watch = st.screen_status.get_mut(&id).expect("invalidated");
+            watch.detached = false;
+            watch.foreground_observed = false;
             *st.output_seq.entry(id).or_default() += 1;
             if st.reg.terminals.get(&id).is_some_and(|t| t.status.as_ref().is_some_and(|s| s.source.is_some())) {
                 st.screen_status.entry(id).or_default().unconfirmed_until =

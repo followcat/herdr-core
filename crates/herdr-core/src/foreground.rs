@@ -171,18 +171,26 @@ impl Core {
             tokio::time::sleep(Duration::from_millis(ms)).await;
             let live: Vec<u32> = self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect();
             for id in live {
+                let generation = self.lock().screen_status.get(&id).map_or(0, |w| w.generation);
                 let pgid = self.foreground(id).await;
                 let now = (pgid > 0).then(|| about(pgid)).flatten();
                 let mut st = self.lock();
-                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live() && t.foreground != now) else {
+                // A response/OS read crossing detach or adoption cannot make
+                // the next screen's saved foreground freshly observed.
+                if st.screen_status.get(&id).map_or(0, |w| w.generation) != generation {
+                    continue;
+                }
+                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live()) else {
                     continue;
                 };
                 if let Some(f) = &now {
                     t.last_cwd = Some(f.cwd.clone());
                 }
                 let was = std::mem::replace(&mut t.foreground, now.clone());
-                self.save_soon();
-                self.emit(&mut st, "foreground", id, serde_json::to_value(&now).unwrap_or_default());
+                if was != now {
+                    self.save_soon();
+                    self.emit(&mut st, "foreground", id, serde_json::to_value(&now).unwrap_or_default());
+                }
                 self.foreground_changed(&mut st, id, was.as_ref());
             }
         }

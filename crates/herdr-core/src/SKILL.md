@@ -217,7 +217,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   report none. Do not guess status from screen text.
   In the followcat fork, a small allowlist of agents that never speak 7501
   get a screen-inferred status instead (`"source": "screen"` on the record);
-  a native report always wins.
+  a native report always wins. After recovery, an inferred root waits for a
+  fresh foreground observation before screen evidence can confirm it; without
+  confirmation it expires after 30 seconds without counting a turn.
 - `blocked` means a person is needed (permission or a question): read the
   screen and ask your user. `send` refuses unless `--force`; don't use it to
   bypass a permission decision. `error`: read why, then send or kill.
