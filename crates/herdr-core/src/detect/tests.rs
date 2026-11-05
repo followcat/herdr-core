@@ -620,3 +620,5 @@ fn limits_parse_from_the_config_table() {
     let cfg: crate::config::Config = toml::from_str("").unwrap();
     assert!(cfg.detect.is_none(), "no table means defaults");
 }
+
+mod command_code_narrow;

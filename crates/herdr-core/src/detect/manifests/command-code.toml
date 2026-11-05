@@ -3,8 +3,8 @@
 # Command Code 1.88.2–1.88.3: turn footers above the composer and tool
 # permission dialogs are captured alongside trust, draft and idle screens.
 id = "command-code"
-version = "2026.11.05.1"
-min_engine_version = 1
+version = "2026.11.05.2"
+min_engine_version = 4
 updated_at = "2026-11-05T00:00:00Z"
 aliases = ["command_code"]
 
@@ -45,20 +45,17 @@ region = "above_prompt_box"
 visible_working = true
 regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z']
 
-# The composer box: "❯ <input or placeholder>" between ─ rules, with the
-# "? for shortcuts" hint under it (cmd-composer / cmd-draft fixtures).
+# The box proves readiness even when a tall draft hides the hint row.
+# Only the live footer above it may suppress idle; draft contents cannot.
 [[rules]]
 id = "composer_prompt"
 state = "idle"
 priority = 100
-region = "bottom_non_empty_lines(6)"
+region = "prompt_box_body"
 visible_idle = true
-contains = ["? for shortcuts"]
-line_regex = ['^\s*❯']
+line_regex = ['^\s*❯(?:\s|$)']
 not = [
-  { contains = ["enter to select", "esc to exit"] },
-  { line_regex = ['^\s*[·☆⌘◇○✧]\s+\S.*esc to interrupt\s+•\s+\d'] },
-  { contains = ["enter select"], line_regex = ['^\s*❯?\s*1\.\s+(?i:yes)\b'] },
+  { region = "above_prompt_box", regex = ['(?m)^[ \t]*[·☆⌘◇○✧][ \t]+\S[^\n]*esc to interrupt[ \t]+•[ \t]+\d[^\n]*(?:\n[ \t]*⎿[ \t]+Tip:[^\n]*)?\s*\z'] },
 ]
 
 # The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows

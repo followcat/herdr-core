@@ -115,7 +115,12 @@ keeps running terminals.
 Manifests are bounded: ≤128 rules, gate depth ≤8, ≤512 gates and ≤1024
 matchers total, ≤512 chars per pattern, ≤256 KiB per file, regexes compiled
 once and shared. A manifest that exceeds the bounds fails validation and is
-ignored.
+ignored. Engine 4 also allows a nested gate to select an absolute `region`
+of the same input. Children without `region` inherit their parent's slice.
+Command Code uses this to check the composer body for readiness while only
+checking the area above it for a live busy footer; draft text is never busy
+UI evidence. A complete composer box is readiness evidence even if its
+shortcuts hint is off screen.
 
 ## Recovery
 

@@ -9,7 +9,7 @@ use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Highest `min_engine_version` a manifest may require.
-pub const ENGINE_VERSION: u32 = 3;
+pub const ENGINE_VERSION: u32 = 4;
 
 const MAX_RULES: usize = 128;
 const MAX_GATE_DEPTH: usize = 8;
@@ -64,7 +64,7 @@ impl Rule {
     /// The gate's verdict on this rule's own region of the input.
     pub fn matches(&self, input: &Input<'_>) -> bool {
         let text = self.region.extract(input);
-        self.gate.matches(text)
+        self.gate.matches(text, input)
     }
 }
 
@@ -72,6 +72,7 @@ impl Rule {
 /// against the lowercased region text; regexes run on the original.
 #[derive(Debug, Default)]
 struct Gate {
+    region: Option<Region>,
     all: Vec<Gate>,
     any: Vec<Gate>,
     not: Vec<Gate>,
@@ -81,12 +82,16 @@ struct Gate {
 }
 
 impl Gate {
-    fn matches(&self, text: &str) -> bool {
+    fn matches(&self, text: &str, input: &Input<'_>) -> bool {
+        let text = self.region.map_or(text, |r| r.extract(input));
         let lower = text.to_lowercase();
-        self.matches_lower(text, &lower)
+        self.matches_lower(text, &lower, input)
     }
 
-    fn matches_lower(&self, text: &str, lower: &str) -> bool {
+    fn matches_lower(&self, text: &str, lower: &str, input: &Input<'_>) -> bool {
+        let passes = |gate: &Gate| {
+            if gate.region.is_some() { gate.matches(text, input) } else { gate.matches_lower(text, lower, input) }
+        };
         if !self.contains.iter().all(|n| lower.contains(n.as_str())) {
             return false;
         }
@@ -96,13 +101,13 @@ impl Gate {
         if !self.line_regex.iter().all(|r| text.lines().any(|line| r.is_match(line))) {
             return false;
         }
-        if !self.all.iter().all(|g| g.matches_lower(text, lower)) {
+        if !self.all.iter().all(passes) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.iter().any(|g| g.matches_lower(text, lower)) {
+        if !self.any.is_empty() && !self.any.iter().any(passes) {
             return false;
         }
-        if self.not.iter().any(|g| g.matches_lower(text, lower)) {
+        if self.not.iter().any(passes) {
             return false;
         }
         true
@@ -165,6 +170,7 @@ struct RawRule {
 impl RawRule {
     fn gate(&self) -> RawGate {
         RawGate {
+            region: None,
             all: self.all.clone(),
             any: self.any.clone(),
             not: self.not.clone(),
@@ -178,6 +184,10 @@ impl RawRule {
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 struct RawGate {
+    /// A nested gate may select an absolute region; otherwise it inherits
+    /// the parent's region. Rule-level regions remain on Rule itself.
+    #[serde(default)]
+    region: Option<String>,
     #[serde(default)]
     all: Vec<RawGate>,
     #[serde(default)]
@@ -348,6 +358,7 @@ fn compile_gate(raw: &RawGate) -> Result<Gate, String> {
             .collect()
     };
     Ok(Gate {
+        region: raw.region.as_deref().map(str::parse).transpose()?,
         all: raw.all.iter().map(compile_gate).collect::<Result<_, _>>()?,
         any: raw.any.iter().map(compile_gate).collect::<Result<_, _>>()?,
         not: raw.not.iter().map(compile_gate).collect::<Result<_, _>>()?,
