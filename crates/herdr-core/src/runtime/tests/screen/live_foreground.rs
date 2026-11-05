@@ -6,7 +6,10 @@ enum Reply {
     Relink,
     Slow,
     Malformed,
-    Absent,
+    Negative,
+    Zero,
+    Shell,
+    Opaque,
 }
 
 /// Both production loops run on actual time. The agent is just a shell
@@ -17,6 +20,7 @@ struct LiveHolder {
     socket: PathBuf,
     id: u32,
     agent: Option<std::process::Child>,
+    pty: Arc<platform::Pty>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
     peers: Arc<Mutex<Vec<UnixStream>>>,
     server: Option<std::thread::JoinHandle<()>>,
@@ -27,20 +31,33 @@ struct LiveHolder {
 
 impl LiveHolder {
     async fn start(reply: Reply) -> Self {
-        let root = PathBuf::from(format!("/var/tmp/hc-r3-live-{}", platform::random_hex()));
+        let root = PathBuf::from(format!("/var/tmp/hc-r4-live-{}", platform::random_hex()));
         let core = recovery::test_core_at(&root);
         let script = root.join("devin");
-        std::fs::write(&script, "#!/bin/sh\nread line\n").unwrap();
-        let agent = std::process::Command::new("sh")
-            .arg(&script)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap();
-        let pgid = agent.id() as i32;
+        let source = if reply == Reply::Opaque {
+            "import ctypes, pathlib, sys\nsys.stdin.readline()\nassert ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) == 0\npathlib.Path(__file__).with_name('opaque-ready').touch()\nsys.stdin.readline()\n"
+        } else {
+            "#!/bin/sh\nread line\n"
+        };
+        std::fs::write(&script, source).unwrap();
+        let argv = if reply == Reply::Shell {
+            vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                "set -m; sh \"$1\"; read line".into(),
+                "hc-test-shell".into(),
+                script.display().to_string(),
+            ]
+        } else {
+            vec![if reply == Reply::Opaque { "python3" } else { "/bin/sh" }.into(), script.display().to_string()]
+        };
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("PATH".into(), std::env::var("PATH").unwrap());
+        let (pty, agent) = platform::spawn_pty(&argv, &env, root.to_str().unwrap(), 80, 24).unwrap();
+        let pty = Arc::new(pty);
         let started = Instant::now();
         let foreground = loop {
+            let pgid = pty.foreground();
             if let Some(fg) = crate::foreground::about(pgid)
                 && fg.agent == Some("devin")
             {
@@ -74,6 +91,7 @@ impl LiveHolder {
         let requests = Arc::new(AtomicUsize::new(0));
         let seen = requests.clone();
         let (detach, actions) = mpsc::channel();
+        let terminal = pty.clone();
         let server = std::thread::spawn(move || {
             let accept = || {
                 let (mut stream, _) = listener.accept().ok()?;
@@ -120,7 +138,13 @@ impl LiveHolder {
                     proto::json_frame(
                         proto::FOREGROUND_IS,
                         id,
-                        &proto::Foreground { pgid: if reply == Reply::Absent { -1 } else { pgid } },
+                        &proto::Foreground {
+                            pgid: match reply {
+                                Reply::Negative => -1,
+                                Reply::Zero => 0,
+                                _ => terminal.foreground(),
+                            },
+                        },
                     )
                 };
                 if io::Write::write_all(&mut stream, &response).is_err() {
@@ -133,7 +157,20 @@ impl LiveHolder {
         assert_eq!(word(&core, id).as_deref(), Some("working"));
         let tasks =
             vec![tokio::spawn(core.clone().watch_foreground()), tokio::spawn(core.clone().watch_screen_status())];
-        Self { core, root, socket, id, agent: Some(agent), tasks, peers, server: Some(server), requests, detach, reply }
+        Self {
+            core,
+            root,
+            socket,
+            id,
+            agent: Some(agent),
+            pty,
+            tasks,
+            peers,
+            server: Some(server),
+            requests,
+            detach,
+            reply,
+        }
     }
 
     fn unchanged(&self, baseline: (u64, u64, u64)) {
@@ -148,6 +185,16 @@ impl LiveHolder {
         let st = self.core.lock();
         let t = &st.reg.terminals[&self.id];
         (t.turn, t.news, st.events.seq)
+    }
+
+    async fn wait_unknown(&self, baseline: (u64, u64, u64), after: u64) {
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while self.core.foreground_unknown.load(Ordering::SeqCst) <= after {
+            self.unchanged(baseline);
+            assert!(Instant::now() < deadline, "the watcher never acknowledged an unknown outcome");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        self.unchanged(baseline);
     }
 
     fn stop(&mut self) {
@@ -173,7 +220,7 @@ impl LiveHolder {
             server.join().unwrap();
         }
         if let Some(mut agent) = self.agent.take() {
-            let _ = agent.kill();
+            self.pty.signal(agent.id(), platform::signal::KILL);
             let _ = agent.wait();
         }
     }
@@ -248,9 +295,48 @@ async fn a_malformed_foreground_reply_is_unknown_and_preserves_the_root() {
 }
 
 #[tokio::test]
-async fn an_observed_negative_foreground_reply_still_withdraws() {
-    let live = LiveHolder::start(Reply::Absent).await;
+async fn nonpositive_foreground_replies_are_unknown_while_the_agent_lives() {
+    for reply in [Reply::Negative, Reply::Zero] {
+        let live = LiveHolder::start(reply).await;
+        let baseline = live.baseline();
+        let unknown = live.core.foreground_unknown.load(Ordering::SeqCst);
+        live.wait_unknown(baseline, unknown).await;
+        assert!(live.core.lock().link(live.id).is_some());
+        assert!(!live.core.lock().screen_status[&live.id].foreground_observed);
+        live.finish().await;
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn an_unreadable_live_foreground_is_unknown_without_a_turn_or_marker() {
+    use std::io::Write;
+    let live = LiveHolder::start(Reply::Opaque).await;
     let baseline = live.baseline();
+    live.pty.writer().unwrap().write_all(b"\n").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !live.root.join("opaque-ready").exists() {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let pid = live.pty.foreground();
+    assert!(PathBuf::from(format!("/proc/{pid}")).exists());
+    assert_eq!(std::fs::read_link(format!("/proc/{pid}/cwd")).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+    live.core.lock().screen_status.get_mut(&live.id).unwrap().foreground_observed = false;
+    let unknown = live.core.foreground_unknown.load(Ordering::SeqCst);
+    live.wait_unknown(baseline, unknown).await;
+    assert!(!live.core.lock().screen_status[&live.id].foreground_observed);
+    live.finish().await;
+}
+
+#[tokio::test]
+async fn an_agent_returning_to_its_shell_still_withdraws_the_confirmed_root() {
+    use std::io::Write;
+    let live = LiveHolder::start(Reply::Shell).await;
+    let baseline = live.baseline();
+    let shell = live.agent.as_ref().unwrap().id() as i32;
+    assert_ne!(live.pty.foreground(), shell, "the agent owns a separate foreground group");
+    live.pty.writer().unwrap().write_all(b"\n").unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while word(&live.core, live.id).is_some() {
         assert!(Instant::now() < deadline);
@@ -259,9 +345,11 @@ async fn an_observed_negative_foreground_reply_still_withdraws() {
     {
         let st = live.core.lock();
         let t = &st.reg.terminals[&live.id];
-        assert_eq!(t.turn, baseline.0 + 1, "an observed loss ends the confirmed turn");
+        assert_eq!(t.turn, baseline.0 + 1);
         assert!(t.news > baseline.1);
-        assert!(t.foreground.is_none());
+        let fg = t.foreground.as_ref().unwrap();
+        assert_eq!(fg.pid, shell);
+        assert!(fg.agent.is_none());
     }
     live.finish().await;
 }

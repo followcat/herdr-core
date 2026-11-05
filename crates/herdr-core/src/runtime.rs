@@ -28,6 +28,9 @@ pub struct Core {
     pub restart: std::sync::atomic::AtomicBool,
     pub paths: Paths,
     pub state: Mutex<State>,
+    /// Completed unknown watcher observations, acknowledged by real-time tests.
+    #[cfg(test)]
+    pub(crate) foreground_unknown: std::sync::atomic::AtomicU64,
     /// Woken on every lifecycle change; waiters re-check what they need.
     pub changed: Notify,
     /// Work for the runtime that the holder thread can't do itself.
@@ -238,6 +241,8 @@ impl Core {
             registry_writer: RegistryWriter::new(paths.state.join("terminals.json"))?,
             paths,
             state: Mutex::new(State { reg, docs, machines, peers, ..Default::default() }),
+            #[cfg(test)]
+            foreground_unknown: Default::default(),
             changed: Notify::new(),
             jobs,
             jobs_rx: Mutex::new(Some(jobs_rx)),

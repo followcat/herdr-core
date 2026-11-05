@@ -176,7 +176,7 @@ fn processes() -> Vec<(i32, i32, u64)> {
 
 #[cfg(target_os = "macos")]
 fn environ(pid: i32) -> Option<Vec<u8>> {
-    crate::foreground::procargs(pid).map(|(_, env)| env)
+    crate::platform::procargs(pid).map(|(_, env)| env)
 }
 
 #[cfg(all(test, unix))]

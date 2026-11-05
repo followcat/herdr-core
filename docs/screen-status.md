@@ -147,9 +147,14 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   and later adoptions. An agent dropped from a non-empty catalog withdraws
   the same quiet way once its foreground is freshly observed.
 - **Failed foreground lookups are unknown.** A missing link, timeout or
-  malformed reply keeps the last observed foreground and emits no foreground
-  or inferred-status event. An actual reply of “no foreground”, or a process
-  observed to have changed or exited, still withdraws the old owner's status.
+  malformed reply, any nonpositive pgid (including older holders' -1 OS
+  errors), or unavailable Unix process metadata keeps the last observed
+  foreground and emits no foreground or inferred-status event. On Linux,
+  only a missing `/proc/<pid>` or ESRCH proves the process gone; permission
+  errors and partial reads are unknown. macOS similarly requires positive
+  ESRCH evidence after a failed metadata lookup. Windows metadata lookup
+  behaviour is unchanged. A valid positive pgid identifying the shell or a
+  different program still withdraws the old owner's status.
   The first real observation after adoption permits silent reconfirmation.
 - **A detached holder freezes its terminals.** Reader failure invalidates
   pending verdicts immediately. Until relink or finish, detection collects,

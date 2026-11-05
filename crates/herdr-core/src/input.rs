@@ -559,8 +559,8 @@ impl Core {
         }
     }
 
-    /// A holder's observed foreground (including -1 for none), or unknown
-    /// when the link, reply or deadline cannot supply an observation.
+    /// A positive foreground pgid, or unknown. Legacy holders forward raw
+    /// tcgetpgrp errors as -1, so no nonpositive reply proves absence.
     pub(crate) async fn foreground(&self, id: u32) -> Option<i32> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         {
@@ -571,7 +571,7 @@ impl Core {
             pending.retain(|tx| !tx.is_closed());
             pending.push(tx);
         }
-        tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok)
+        tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok).filter(|pid| *pid > 0)
     }
 }
 

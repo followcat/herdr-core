@@ -2,6 +2,9 @@
 //! surface: connections, terminals, process trees, the console, files.
 //! Everything above it is shared.
 
+mod foreground;
+pub use foreground::*;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
