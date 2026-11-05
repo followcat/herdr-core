@@ -1,4 +1,4 @@
-# Every master push and PR: native Linux x86_64, macOS and Windows
+# Every master/followcat push and PR: native Linux x86_64, macOS and Windows
 # clippy/tests, plus upgrade from the last release. Updates must keep terminals.
 #
 # Rust caches use one pinned toolchain and only master runs save, so PR
@@ -8,7 +8,7 @@ name: ci
 
 on:
   push:
-    branches: [master]
+    branches: [master, followcat]
   # No paths-ignore here: CI is required to merge, so every PR needs it.
   pull_request:
   workflow_dispatch:
