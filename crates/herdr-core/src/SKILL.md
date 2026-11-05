@@ -75,6 +75,12 @@ In human-readable output, `ls` shows the `where` label or the current folder;
 it is unknown. JSON keeps `cwd` as the launch folder; `get` also includes the
 current folder in `foreground.cwd`.
 
+Fork full terminal RPCs and events expose optional cached `repository` facts (feature
+`repository_facts`): origin core, machine-side cwd, checkout identity, repo-root auto-label,
+branch and nullable locally observed upstream counts. `pending`/`stale`/`unavailable` qualify
+freshness; `ready` can have unknown Git fields. These paths are opaque on the viewer. No fetch
+runs. See `docs/repository-facts.md` for bounded probing and the Windows count omission.
+
 `read --lines 0` reads only the visible screen. History reads may scroll a
 full-screen app, then restore its view. While its status is `working`,
 `blocked` or `error`, history reads return only the screen immediately,

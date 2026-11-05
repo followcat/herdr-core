@@ -94,6 +94,7 @@ pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Valu
         .await
     {
         Ok(mut r) => {
+            mirror::supported(&mut r, &line.features);
             r["quiet_human_release"] = false.into();
             let there = r["channel"].as_u64().unwrap_or_default() as u32;
             let enabled = params["observe"] == true

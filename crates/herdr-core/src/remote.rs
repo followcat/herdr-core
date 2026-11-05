@@ -251,7 +251,9 @@ async fn hold(core: &Arc<Core>, m: &Machine, mut d: crate::machines::Dialed) {
                 match message["method"].as_str() {
                     None if message["id"] == mirror_call => {
                         lock(&line.mirror).1 = message["result"]["channel"].as_u64().map(|c| c as u32);
-                        mirror_replace(core, m, message["result"]["terminals"].as_array().cloned().unwrap_or_default());
+                        let mut snapshot = message["result"]["terminals"].clone();
+                        mirror::supported(&mut snapshot, &line.features);
+                        mirror_replace(core, m, snapshot.as_array().cloned().unwrap_or_default());
                         if message["result"]["channel"].is_u64() {
                             // Docs are not in terminal snapshots: readers must refetch after a gap.
                             core.documents_missed(&mut core.lock());
@@ -748,7 +750,7 @@ async fn forward_once(core: &Core, m: &Machine, method: &str, mut params: Value)
             format!("hc machine update {}", m.name),
         ));
     }
-    let reply = line.call(&m.name, method, params, deadline).await.map_err(|e| match e.kind.as_str() {
+    let mut reply = line.call(&m.name, method, params, deadline).await.map_err(|e| match e.kind.as_str() {
         "unknown_method" => RpcError::new(
             "needs_update",
             format!("{}'s hc is older and has no {method}", m.name),
@@ -757,7 +759,12 @@ async fn forward_once(core: &Core, m: &Machine, method: &str, mut params: Value)
         _ => e,
     })?;
     // Document contents are opaque: address-shaped keys belong to the client.
-    let reply = if method.starts_with("doc.") { reply } else { localize(core, &m.name, &[], reply) };
+    let reply = if method.starts_with("doc.") {
+        reply
+    } else {
+        mirror::supported(&mut reply, &line.features);
+        localize(core, &m.name, &[], reply)
+    };
     // It started work there: its child may now call back and send it notes.
     if method == "terminal.run"
         && let Some(parent) = reply["parent"].as_str().and_then(crate::terminals::parse_id)
@@ -780,7 +787,10 @@ pub async fn forward_to(core: &Core, to: &To, method: &str, params: Value) -> Re
                 .ok_or_else(|| RpcError::new("unavailable", format!("{name} is not connected"), "try again later"))?;
             let calls_me = core.lock().peers.get(id).map(|p| p.calls_me.clone()).unwrap_or_default();
             let deadline = deadline_for(core, method, &params);
-            let reply = line.call(name, method, params, deadline).await?;
+            let mut reply = line.call(name, method, params, deadline).await?;
+            if !method.starts_with("doc.") {
+                mirror::supported(&mut reply, &line.features);
+            }
             Ok(if method.starts_with("doc.") { reply } else { localize(core, name, &[calls_me.as_str()], reply) })
         }
     }

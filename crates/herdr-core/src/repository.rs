@@ -5,6 +5,78 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 pub mod probe;
+pub(crate) mod service;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FactState {
+    Pending,
+    Ready,
+    Stale,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AheadBehind {
+    pub ahead: u64,
+    pub behind: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Checkout {
+    pub repository_key: String,
+    pub checkout_key: String,
+    pub repo_name: String,
+    pub checkout_name: String,
+    pub repo_root: String,
+    pub is_linked_worktree: bool,
+    pub is_bare: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RepositoryFacts {
+    /// Origin core, never a relay alias. Keys and paths are opaque on viewers.
+    pub core_id: String,
+    /// Machine-side directory this observation concerns.
+    pub cwd: String,
+    pub state: FactState,
+    pub auto_label: Option<String>,
+    pub checkout: Option<Checkout>,
+    pub branch: Option<String>,
+    /// Unknown counts are null; observed zero counts remain zero.
+    pub ahead_behind: Option<AheadBehind>,
+}
+
+impl RepositoryFacts {
+    fn pending(core_id: &str, cwd: &str) -> Self {
+        Self {
+            core_id: core_id.into(),
+            cwd: cwd.into(),
+            state: FactState::Pending,
+            auto_label: None,
+            checkout: None,
+            branch: None,
+            ahead_behind: None,
+        }
+    }
+}
+
+impl From<&Repository> for Checkout {
+    fn from(repo: &Repository) -> Self {
+        Self {
+            repository_key: repo.repository_key.clone(),
+            checkout_key: repo.checkout_key.clone(),
+            repo_name: repo.repo_name.clone(),
+            checkout_name: repo.checkout_name.clone(),
+            repo_root: repo.root.to_string_lossy().into_owned(),
+            is_linked_worktree: repo.is_linked_worktree,
+            is_bare: repo.is_bare,
+        }
+    }
+}
 
 const SMALL_FILE: u64 = 64 * 1024;
 

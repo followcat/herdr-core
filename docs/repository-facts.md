@@ -1,7 +1,13 @@
 # Repository probe contract (followcat fork)
 
-The private provider discovers machine-local checkout identity and caches Git observations.
-It is not yet wired to terminal RPC results or the foreground watcher; that is C3 task 05.
+The `repository_facts` feature supplies optional `Terminal.repository` in full terminal RPC
+records and snapshots. `repository` events replace that complete object. It contains origin
+`core_id`, observed machine-side `cwd`, `state` (`pending`, `ready`, `stale`, `unavailable`),
+nullable `auto_label`, `checkout`, `branch` and `ahead_behind: {ahead, behind}`. Checkout contains
+`repository_key`, `checkout_key`, `repo_name`, `checkout_name`, `repo_root`, `is_linked_worktree`
+and `is_bare`. Keys and paths are opaque on viewers; group by origin core and repository key.
+Absence means unsupported, not a non-repository. Ready plain directories have null Git fields.
+No upstream, unborn/detached/broken refs or failed counts never imply observed zero counts.
 
 Discovery walks at most 512 ancestors, accepts valid directory/gitdir/commondir and bare layouts,
 and bounds marker reads to 64 KiB. Group keys are the canonical-best-effort common Git directory;
@@ -49,7 +55,19 @@ Windows deliberately starts no Git child until containment is implemented there.
 report discovered identity/labels and a bounded readable loose-HEAD branch; counts are unknown.
 There is no uncontained Windows config parser child hidden behind that fallback.
 
-Task 05 must enforce the approved fixed worker/queue/cache limits, never await probes in the
-foreground watcher, and detach rather than join a worker stuck in an uncancellable filesystem
-call. It must include the never-returning-worker shutdown regression. This provider alone starts
-no workers and changes no shutdown behavior.
+The scheduler uses observed foreground cwd, otherwise launch cwd. It examines at most 64
+terminals every 250 ms, with two fixed IO workers, at most two jobs started per second, one job
+per key in flight and a deduplicated 128-key queue. Revalidate positive discovery/probes every
+five seconds, non-repository discovery every 30; foreground changes coalesce at a one-second
+per-key floor. The LRU caches hold at most 1,024 directories and 256 checkout contexts. Probe
+dependencies are capped at 256 paths and 128 KiB of path text per cache entry. Overload can delay
+freshness but cannot create workers or an unbounded queue. Registrations retire on finish/removal.
+
+Filesystem/Git work never runs under the runtime lock or in the foreground watcher. Shutdown
+detaches the two workers without joining a filesystem syscall that may never return. Late
+results from invalidated generations are discarded. Same-cwd observations survive failures as
+stale; cwd changes publish pending with null values. Positive observations become stale after
+15 seconds without success, plain directories after 45. Finished facts freeze. Restored facts
+begin stale and must be revalidated. Older relay paths strip unsupported repository objects and
+patches instead of exposing incidental cached facts. The compact CLI list retains its existing
+projection; use full terminal RPCs, get or events for these facts.

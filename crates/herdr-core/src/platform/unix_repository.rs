@@ -5,6 +5,10 @@ use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, ChildStderr, ChildStdout, Command};
 
+pub fn user_home() -> std::path::PathBuf {
+    std::env::var_os("HOME").map_or_else(|| "/".into(), std::path::PathBuf::from)
+}
+
 pub fn repository_subprocesses() -> bool {
     true
 }

@@ -2,6 +2,26 @@
 
 use super::*;
 
+/// Optional origin facts need support at every hop. Only inspect protocol
+/// envelopes: document values and user labels are opaque.
+pub(super) fn supported(value: &mut Value, features: &[String]) {
+    if let Some(values) = value.as_array_mut() {
+        for value in values {
+            supported(value, features);
+        }
+        return;
+    }
+    let Some(object) = value.as_object_mut() else { return };
+    if object.get("address").is_some_and(Value::is_string) && !features.iter().any(|f| f == "repository_facts") {
+        object.remove("repository");
+    }
+    for key in ["terminals", "terminal", "record"] {
+        if let Some(value) = object.get_mut(key) {
+            supported(value, features);
+        }
+    }
+}
+
 /// A machine's terminals now (after a connect, or after it says we missed
 /// some): subscribers here hear what appeared, changed or went.
 pub(super) fn mirror_replace(core: &Core, m: &Machine, terminals: Vec<Value>) {
@@ -53,10 +73,17 @@ pub(super) fn mirror_events(core: &Core, m: &Machine, line: &Line, payload: &[u8
         done.split(|b| *b == b'\n').filter(|l| !l.is_empty()).map(<[u8]>::to_vec).collect()
     };
     for l in lines {
-        let Ok(msg) = serde_json::from_slice::<Value>(&l) else { continue };
+        let Ok(mut msg) = serde_json::from_slice::<Value>(&l) else { continue };
         match msg["method"].as_str() {
-            Some("event") => mirror_event(core, m, msg["params"].clone()),
+            Some("event") => {
+                if msg["params"]["type"] == "repository" && !line.features.iter().any(|f| f == "repository_facts") {
+                    continue;
+                }
+                supported(&mut msg["params"]["data"], &line.features);
+                mirror_event(core, m, msg["params"].clone());
+            }
             Some("missed") => {
+                supported(&mut msg["params"], &line.features);
                 mirror_replace(core, m, msg["params"]["terminals"].as_array().cloned().unwrap_or_default());
                 core.documents_missed(&mut core.lock());
             }
@@ -117,6 +144,26 @@ pub(super) fn apply(record: &mut Value, kind: &str, data: &Value) {
         "keep" => set(record, &["keep"]),
         "size" => set(record, &["cols", "rows"]),
         "foreground" => record["foreground"] = data.clone(),
+        "repository" if data.get("repository").is_some() => set(record, &["repository"]),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_facts_are_removed_only_from_terminal_envelopes() {
+        let original = json!({"terminals":[{"address":"t1","repository":{"branch":"old"},
+            "labels":{"repository":"ordinary"}}],"value":{"repository":"document"}});
+        let mut old = original.clone();
+        supported(&mut old, &[]);
+        assert!(old["terminals"][0].get("repository").is_none());
+        assert_eq!(old["terminals"][0]["labels"]["repository"], "ordinary");
+        assert_eq!(old["value"]["repository"], "document");
+        let mut new = original.clone();
+        supported(&mut new, &["repository_facts".into()]);
+        assert_eq!(new, original);
     }
 }

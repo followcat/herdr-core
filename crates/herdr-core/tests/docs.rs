@@ -80,7 +80,10 @@ fn terminal_filtered_subscribers_do_not_hear_document_changes() {
     let mut c = s.connect();
     c.call(1, "doc.set", json!({"name": "app", "value": true, "version": 0}));
     c.call(2, "terminal.label", json!({"terminal": terminal, "labels": {"test": "yes"}}));
-    let event = next_event(&mut events, |m| m["method"] == "event");
+    let event = next_event(&mut events, |m| {
+        m["method"] == "event"
+            && !["foreground", "repository", "activity"].contains(&m["params"]["type"].as_str().unwrap_or_default())
+    });
     assert_eq!(event["params"]["type"], "labels");
 }
 

@@ -68,7 +68,10 @@ fn events_arrive_in_order_after_a_snapshot() {
     let mut seen = Vec::new();
     while seen.last().map(String::as_str) != Some("removed") {
         // Foreground facts come about twice a second, for every terminal: tested on their own.
-        let e = next_event(&mut conn, |m| m["method"] == "event" && m["params"]["type"] != "foreground");
+        let e = next_event(&mut conn, |m| {
+            m["method"] == "event"
+                && !["foreground", "repository", "activity"].contains(&m["params"]["type"].as_str().unwrap_or_default())
+        });
         let p = &e["params"];
         assert_eq!(p["terminal"], t.as_str());
         assert!(p["seq"].as_u64().unwrap() > seq, "seq goes up");

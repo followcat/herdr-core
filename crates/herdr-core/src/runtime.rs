@@ -60,6 +60,7 @@ pub struct Core {
 
 #[derive(Default)]
 pub struct State {
+    pub(crate) repositories: crate::repository::service::Scheduler,
     pub reg: Registry,
     pub docs: std::collections::BTreeMap<String, crate::api::DocGetResult>,
     pub screens: HashMap<u32, Screen>,
@@ -229,6 +230,9 @@ impl Core {
         // The agent identity is not serialized. Rehydrate from the saved
         // foreground facts before locks, holder readers or workers exist.
         for t in reg.terminals.values_mut() {
+            if let Some(facts) = &mut t.repository {
+                facts.state = crate::repository::FactState::Stale;
+            }
             if let Some(fg) = t.foreground.as_mut() {
                 fg.agent = crate::detect::identify(fg);
             }
@@ -422,6 +426,7 @@ impl Core {
         st.screen_status.remove(&id);
         st.foreground.remove(&id);
         let Some(was) = st.reg.terminals.remove(&id) else { return };
+        st.repositories.remove(id);
         self.emit_from(st, "removed", id, serde_json::json!({}), Some(&was));
         let _ = std::fs::remove_file(self.snapshot_path(id));
         let _ = std::fs::remove_dir_all(crate::put::dir(&self.paths.state, id));

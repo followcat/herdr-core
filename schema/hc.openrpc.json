@@ -1,6 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AheadBehind": {
+        "properties": {
+          "ahead": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "behind": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ahead",
+          "behind"
+        ],
+        "type": "object"
+      },
       "AttachResult": {
         "properties": {
           "automatic_input": {
@@ -33,6 +52,41 @@
           "terminal",
           "resize_notifications",
           "automatic_input"
+        ],
+        "type": "object"
+      },
+      "Checkout": {
+        "properties": {
+          "checkout_key": {
+            "type": "string"
+          },
+          "checkout_name": {
+            "type": "string"
+          },
+          "is_bare": {
+            "type": "boolean"
+          },
+          "is_linked_worktree": {
+            "type": "boolean"
+          },
+          "repo_name": {
+            "type": "string"
+          },
+          "repo_root": {
+            "type": "string"
+          },
+          "repository_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_key",
+          "checkout_key",
+          "repo_name",
+          "checkout_name",
+          "repo_root",
+          "is_linked_worktree",
+          "is_bare"
         ],
         "type": "object"
       },
@@ -202,6 +256,15 @@
           "ms"
         ],
         "type": "object"
+      },
+      "FactState": {
+        "enum": [
+          "pending",
+          "ready",
+          "stale",
+          "unavailable"
+        ],
+        "type": "string"
       },
       "FileReadResult": {
         "properties": {
@@ -685,6 +748,60 @@
         ],
         "type": "object"
       },
+      "RepositoryFacts": {
+        "properties": {
+          "ahead_behind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AheadBehind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unknown counts are null; observed zero counts remain zero."
+          },
+          "auto_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checkout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Checkout"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "core_id": {
+            "description": "Origin core, never a relay alias. Keys and paths are opaque on viewers.",
+            "type": "string"
+          },
+          "cwd": {
+            "description": "Machine-side directory this observation concerns.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FactState"
+          }
+        },
+        "required": [
+          "core_id",
+          "cwd",
+          "state"
+        ],
+        "type": "object"
+      },
       "RunResult": {
         "properties": {
           "address": {
@@ -828,6 +945,17 @@
             "default": false,
             "description": "Whether the program ever sent a 7501 report.",
             "type": "boolean"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryFacts"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cached machine-side repository observation; absent on older cores."
           },
           "rm": {
             "default": false,
@@ -1312,6 +1440,17 @@
             "default": false,
             "description": "Whether the program ever sent a 7501 report.",
             "type": "boolean"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryFacts"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cached machine-side repository observation; absent on older cores."
           },
           "rm": {
             "default": false,

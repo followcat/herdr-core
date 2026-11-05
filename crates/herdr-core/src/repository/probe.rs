@@ -26,6 +26,7 @@ struct Stamp {
 }
 
 /// One checkout cache; the future service shares it across terminals in that checkout.
+#[derive(Clone)]
 pub struct Probe {
     home: PathBuf,
     xdg: PathBuf,
@@ -245,7 +246,12 @@ fn stamp(path: PathBuf) -> io::Result<Stamp> {
 }
 
 fn stamps(files: BTreeSet<PathBuf>) -> io::Result<Vec<Stamp>> {
-    files.into_iter().map(stamp).collect()
+    let stamps: Vec<_> = files.into_iter().map(stamp).collect::<io::Result<_>>()?;
+    let bytes: usize = stamps.iter().map(|s| s.path.as_os_str().len() + s.target.as_os_str().len()).sum();
+    if stamps.len() > 256 || bytes > 128 * 1024 {
+        return Err(io::Error::other("repository dependency fingerprint exceeds its cache budget"));
+    }
+    Ok(stamps)
 }
 
 fn current(previous: &[Stamp]) -> io::Result<bool> {

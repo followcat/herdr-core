@@ -23,6 +23,7 @@ pub const FEATURES: &[&str] = &[
     "automatic_input",
     "os_hostname",
     "quiet_human_release",
+    "repository_facts",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// A terminal's identity: fixed at start from whoever starts it.

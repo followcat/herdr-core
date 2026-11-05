@@ -3,6 +3,10 @@
 use std::io;
 use std::process::{Child, ChildStderr, ChildStdout, Command};
 
+pub fn user_home() -> std::path::PathBuf {
+    std::env::var_os("USERPROFILE").map_or_else(|| r"C:\".into(), std::path::PathBuf::from)
+}
+
 pub fn repository_subprocesses() -> bool {
     false
 }
