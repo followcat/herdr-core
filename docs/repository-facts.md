@@ -59,6 +59,10 @@ network/helpers. SSH, askpass and protocol overrides provide an additional barri
 Windows deliberately starts no Git child until containment is implemented there. It can still
 report discovered identity/labels and a bounded readable loose-HEAD branch; counts are unknown.
 There is no uncontained Windows config parser child hidden behind that fallback.
+The same bounded loose-HEAD fallback applies on Unix if Git cannot be spawned (including
+missing/non-executable Git). It reports only the readable symbolic branch, with unknown counts;
+detached/malformed HEAD is unknown and oversized HEAD is rejected. It does not mask errors
+from a Git child that did run. Cached fallback facts retry Git on the 60-second revalidation.
 
 The scheduler uses observed foreground cwd, otherwise launch cwd. It examines at most 64
 terminals every 250 ms, with two fixed IO workers, at most two jobs started per second, one job

@@ -73,7 +73,8 @@ impl Probe {
             self.xdg.join("git/config"),
         ]);
         let mut budget = Budget::new(&self.home, &self.xdg, repo);
-        let result = observe(repo, &mut budget, &mut files);
+        let result = observe(repo, &mut budget, &mut files)
+            .or_else(|e| if budget.spawn_failed { loose_head(repo) } else { Err(e) });
         self.processes = budget.processes;
         // Record even a failed probe, avoiding repeated expensive config failures every tick.
         self.stamps = stamps(files)?;
@@ -87,9 +88,7 @@ impl Probe {
 fn observe(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<PathBuf>) -> io::Result<Facts> {
     if !crate::platform::repository_subprocesses() {
         // Windows has no child containment here. Do not run even config readers without it.
-        let branch = small_file(&repo.git_dir.join("HEAD"))?
-            .and_then(|head| head.trim().strip_prefix("ref: refs/heads/").map(String::from));
-        return Ok(Facts { branch, ahead_behind: None });
+        return loose_head(repo);
     }
     let identity = identity(repo, budget, files)?;
     let mut facts = Facts { branch: identity.branch.clone(), ahead_behind: None };
@@ -106,6 +105,15 @@ fn observe(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Path
         }
     }
     Ok(facts)
+}
+
+fn loose_head(repo: &Repository) -> io::Result<Facts> {
+    let branch = small_file(&repo.git_dir.join("HEAD"))?.and_then(|head| {
+        let name = head.trim().strip_prefix("ref: ")?;
+        let branch = name.strip_prefix("refs/heads/")?;
+        (!branch.is_empty() && valid_ref(name)).then(|| branch.into())
+    });
+    Ok(Facts { branch, ahead_behind: None })
 }
 
 #[derive(PartialEq, Eq)]

@@ -13,6 +13,7 @@ pub(super) struct Budget<'a> {
     deadline: Instant,
     remaining: usize,
     pub processes: usize,
+    pub spawn_failed: bool,
 }
 
 pub(super) struct Output {
@@ -22,14 +23,21 @@ pub(super) struct Output {
 
 impl<'a> Budget<'a> {
     pub fn new(home: &'a Path, xdg: &'a Path, repo: &'a Repository) -> Self {
-        Self { home, xdg, repo, deadline: Instant::now() + Duration::from_secs(2), remaining: LIMIT, processes: 0 }
+        Self {
+            home,
+            xdg,
+            repo,
+            deadline: Instant::now() + Duration::from_secs(2),
+            remaining: LIMIT,
+            processes: 0,
+            spawn_failed: false,
+        }
     }
 
     pub fn run(&mut self, args: &[&str]) -> io::Result<Output> {
         if self.processes >= 8 || Instant::now() >= self.deadline {
             return Err(io::Error::new(io::ErrorKind::TimedOut, "repository probe budget exhausted"));
         }
-        self.processes += 1;
         let mut command = crate::platform::repository_command();
         command
             .env_clear()
@@ -62,7 +70,8 @@ impl<'a> Budget<'a> {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command.spawn()?;
+        let mut child = command.spawn().inspect_err(|_| self.spawn_failed = true)?;
+        self.processes += 1;
         let result = (|| {
             let mut stdout = child.stdout.take().expect("piped stdout");
             let mut stderr = child.stderr.take().expect("piped stderr");
