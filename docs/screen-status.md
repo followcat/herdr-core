@@ -131,10 +131,18 @@ selects the dialog or hint area below that bottom divider. The older region
 names keep their existing behavior for other manifests. A pasted divider
 exactly as wide as the terminal remains ambiguous and is an accepted limit.
 
+Command Code 1.88.3's built-in activity inventory includes all 74 default
+verbs, eight permission result labels, Executing commands, compaction,
+connection and UI status messages. The working rule and idle exclusion use
+identical alternatives, split only to retain the 512-character matcher cap;
+engine 4 has no named matcher references. Arbitrary mod-provided status
+text is outside this inventory. Known built-in UI shapes can also be
+imitated byte-for-byte; origin cannot be recovered from screen text.
+
 Command Code accepts the six captured spinner glyphs `· ☆ ⌘ ◇ ○ ✧`, a
-capitalized activity verb ending in `…`, and either no suffix, a compact
-counter (including decimals and `k`), or full interrupt controls. The legacy
-captured `Shell command allowed` label also remains supported. A full-footer
+built-in activity label, and either no suffix, a compact
+counter (including decimals and `k`), or full interrupt controls. All permission allowed/denied labels and `Executing: <command>` are also
+supported. A full-footer
 remainder must sit directly after that activity line. The captured
 `Use shift+tab to enable accept edits` Tip can wrap between words; it does
 not admit arbitrary later transcript rows. `✻` summaries and `⠶` message
