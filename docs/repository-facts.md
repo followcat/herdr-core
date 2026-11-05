@@ -70,6 +70,8 @@ normalization or refspec-pattern relaxations: forbidden components, `.lock` suff
 control bytes, `..`, `@{`, duplicate/trailing slashes and a trailing dot are rejected. Valid
 Unicode names are preserved. HEAD trimming accepts only space, tab, LF and CR, as Git does;
 form feed and vertical tab remain invalid ref characters.
+The Git path strips only one LF or CRLF terminator from `symbolic-ref` output; valid Unicode
+whitespace in a branch name is preserved for both publication and upstream-config lookup.
 
 The scheduler uses observed foreground cwd, otherwise launch cwd. It examines at most 64
 terminals every 250 ms, with two fixed IO workers, at most two jobs started per second, one job

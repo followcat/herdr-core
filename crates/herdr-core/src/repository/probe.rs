@@ -133,7 +133,10 @@ fn identity(repo: &Repository, budget: &mut Budget<'_>, files: &mut BTreeSet<Pat
     let config = config(&output.stdout, budget.home, files)?;
     let output = budget.run(&["symbolic-ref", "--quiet", "HEAD"])?;
     let full_branch = if output.status.success() {
-        Some(text(&output.stdout)?.trim().to_string())
+        let line = text(&output.stdout)?;
+        // The branch name is data: remove only the one LF/CRLF terminator.
+        let line = line.strip_suffix('\n').map_or(line, |line| line.strip_suffix('\r').unwrap_or(line));
+        Some(line.to_owned())
     } else if output.status.code() == Some(1) {
         None
     } else {

@@ -62,6 +62,35 @@ fn stat_first_cache_refreshes_local_divergence_and_same_oid_branch_switch() {
 }
 
 #[test]
+fn symbolic_ref_preserves_unicode_whitespace_for_the_branch_and_its_upstream() {
+    let s = session();
+    let root = repo(&s);
+    git(&s, &root, &["branch", "upstream"]);
+    for message in ["ahead-one", "ahead-two"] {
+        git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", message]);
+    }
+    git(&s, &root, &["checkout", "--quiet", "upstream"]);
+    git(&s, &root, &["commit", "--quiet", "--allow-empty", "-m", "behind"]);
+    let branch = "topic\u{2003}";
+    git(&s, &root, &["checkout", "--quiet", "-b", branch, "main"]);
+    for (name, merge) in [(branch, "refs/heads/upstream"), ("topic", "refs/heads/main")] {
+        git(&s, &root, &["config", &format!("branch.{name}.remote"), "."]);
+        git(&s, &root, &["config", &format!("branch.{name}.merge"), merge]);
+    }
+    let output = s.program("git").arg("-C").arg(&root).args(["symbolic-ref", "--quiet", "HEAD"]).output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, format!("refs/heads/{branch}\n").as_bytes(), "Git preserves the name");
+    let repo = discover(&root, None).unwrap().repository.unwrap();
+    let mut probe = Probe::new(s.root.clone(), None);
+    let now = Instant::now();
+    let facts = probe.refresh(&repo, now).unwrap();
+    assert_eq!(facts.branch.as_deref(), Some(branch));
+    assert_eq!(facts.ahead_behind, Some((2, 1)), "use the Unicode branch config, not topic's 0/0 upstream");
+    assert_eq!(probe.refresh(&repo, now + Duration::from_secs(5)).unwrap(), facts);
+    assert_eq!(probe.processes(), 0, "cache the actual branch/ref dependencies");
+}
+
+#[test]
 fn includes_packed_refs_missing_includes_and_custom_refspecs_are_observed() {
     let s = session();
     let root = repo(&s);
