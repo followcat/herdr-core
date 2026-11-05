@@ -132,6 +132,11 @@ Short pasted dividers remain draft content. `after_last_full_width_rule`
 selects the dialog or hint area below the last maximum-length divider. The older region
 names keep their existing behavior for other manifests. A pasted divider
 exactly as wide as the terminal remains ambiguous and is an accepted limit.
+Engine 5 adds `outside_full_width_prompt_box`: below the last full-width
+rule when a verified composer exists, otherwise the whole input. Folder
+trust reads only that region, so a pasted trust dialog is draft input.
+A real unboxed TrustPrompt remains visible even without its top divider;
+wrapped title/control phrases are compared across whitespace.
 
 Command Code 1.88.3's built-in activity inventory includes all 74 default
 verbs, eight permission result labels, Executing commands, compaction,

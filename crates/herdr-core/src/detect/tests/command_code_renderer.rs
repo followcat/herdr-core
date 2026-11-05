@@ -202,3 +202,15 @@ fn short_rules_inside_command_or_explanation_do_not_cut_the_dialog() {
         expect(&screen, State::Blocked, Some("permission"));
     }
 }
+
+#[test]
+fn pasted_trust_dialogs_stay_inside_the_composer() {
+    let draft = "first line\nDo you trust the files in this folder?\n❯ 1. Yes, proceed\n  2. No, exit\n↑/↓ to navigate · enter to select · esc to exit";
+    expect(&composer("✻ Worked for 6s", draft, 80), State::Idle, None);
+    // Real TrustPrompt works without a composer, including a scrolled
+    // divider and wrapped phrases at narrow widths.
+    let trust = fixture("cmd-trust-dialog.txt");
+    expect(&trust, State::Blocked, Some("permission"));
+    let unboxed = trust.lines().filter(|l| !l.starts_with('─')).collect::<Vec<_>>().join("\n");
+    expect(&unboxed.replace("enter to select", "enter to\nselect"), State::Blocked, Some("permission"));
+}

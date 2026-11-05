@@ -131,6 +131,17 @@ pub fn after_last_full_width_rule(content: &str) -> &str {
     from_line(content, last + 1)
 }
 
+/// UI outside a verified composer: below its last full-width rule. If no
+/// box exists (e.g. a trust overlay, even with a scrolled divider), all text
+/// is eligible. Draft rows in a verified box are never returned.
+pub fn outside_full_width_prompt_box(content: &str) -> &str {
+    let lines: Vec<&str> = content.lines().collect();
+    if full_width_box(&lines).is_some() {
+        return last_full_width_rule(&lines).map_or("", |(last, _)| from_line(content, last + 1));
+    }
+    content
+}
+
 // --- Codex prompt/block markers ------------------------------------------
 
 /// `›` alone or starting a line: the Codex prompt.

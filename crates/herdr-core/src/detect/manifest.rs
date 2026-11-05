@@ -9,7 +9,7 @@ use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
 
 /// Highest `min_engine_version` a manifest may require.
-pub const ENGINE_VERSION: u32 = 4;
+pub const ENGINE_VERSION: u32 = 5;
 
 const MAX_RULES: usize = 128;
 const MAX_GATE_DEPTH: usize = 8;
@@ -384,6 +384,7 @@ pub enum Region {
     PromptBoxBody,
     FullWidthPromptBoxBody,
     AboveFullWidthPromptBox,
+    OutsideFullWidthPromptBox,
     AfterLastFullWidthRule,
     AbovePromptBox,
     LastNonEmptyAbovePromptBox,
@@ -407,6 +408,7 @@ impl Region {
             Region::CurrentPromptBlockMarker => r::current_prompt_block_marker(input.screen),
             Region::AfterCurrentPromptBlockMarker => r::after_current_prompt_block_marker(input.screen),
             Region::FullWidthPromptBoxBody => r::full_width_prompt_box_body(input.screen),
+            Region::OutsideFullWidthPromptBox => r::outside_full_width_prompt_box(input.screen),
             Region::AboveFullWidthPromptBox => r::above_full_width_prompt_box(input.screen),
             Region::AfterLastFullWidthRule => r::after_last_full_width_rule(input.screen),
             Region::PromptBoxBody => r::prompt_box_body(input.screen),
@@ -436,6 +438,7 @@ impl std::str::FromStr for Region {
             "current_prompt_block_marker" => Region::CurrentPromptBlockMarker,
             "after_current_prompt_block_marker" => Region::AfterCurrentPromptBlockMarker,
             "full_width_prompt_box_body" => Region::FullWidthPromptBoxBody,
+            "outside_full_width_prompt_box" => Region::OutsideFullWidthPromptBox,
             "above_full_width_prompt_box" => Region::AboveFullWidthPromptBox,
             "after_last_full_width_rule" => Region::AfterLastFullWidthRule,
             "prompt_box_body" => Region::PromptBoxBody,
