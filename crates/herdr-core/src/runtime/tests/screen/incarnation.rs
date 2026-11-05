@@ -114,3 +114,31 @@ async fn a_new_start_stamp_changes_the_owner_and_rejects_the_old_verdict() {
         remove_root(&root);
     }
 }
+
+#[test]
+fn dead_stat_states_prove_absence_even_when_metadata_is_empty() {
+    for state in ['Z', 'X'] {
+        let dead = stat(100, 100, 10).replace(") S ", &format!(") {state} "));
+        let before = platform::read_linux_foreground(
+            100,
+            || Ok(dead.clone()),
+            || panic!("an already dead process needs no metadata read"),
+        );
+        assert!(before.unwrap().is_none());
+        // It may die during the metadata read: the second stat still proves
+        // absence, even though cmdline/cwd became empty or unreadable.
+        let mut reads = [stat(100, 100, 10), dead].into_iter();
+        let after = platform::read_linux_foreground(
+            100,
+            || Ok(reads.next().unwrap()),
+            || Err(io::Error::new(io::ErrorKind::UnexpectedEof, "empty cmdline")),
+        );
+        assert!(after.unwrap().is_none());
+    }
+    let live = platform::read_linux_foreground(
+        100,
+        || Ok(stat(100, 100, 10)),
+        || Err(io::Error::new(io::ErrorKind::PermissionDenied, "live but opaque")),
+    );
+    assert_eq!(live.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+}

@@ -224,7 +224,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   Nonpositive holder pgids and unreadable Unix process metadata are unknown;
   returning to a shell is observed through its valid positive pgid. Linux
   observations also validate group leadership and the process start stamp;
-  PID reuse invalidates the previous owner's inferred verdict.
+  PID reuse invalidates the previous owner's inferred verdict. A Linux stat
+  state of Z (zombie) or X (dead) proves foreground loss, including when the
+  wrapper stays alive without reaping it; confirmed roots withdraw normally.
 - `blocked` means a person is needed (permission or a question): read the
   screen and ask your user. `send` refuses unless `--force`; don't use it to
   bypass a permission decision. `error`: read why, then send or kill.

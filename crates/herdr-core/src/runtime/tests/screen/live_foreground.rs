@@ -11,6 +11,7 @@ enum Reply {
     Zero,
     Shell,
     Opaque,
+    Zombie,
 }
 
 /// Both production loops run on actual time. The agent is just a shell
@@ -32,11 +33,13 @@ struct LiveHolder {
 
 impl LiveHolder {
     async fn start(reply: Reply) -> Self {
-        let root = PathBuf::from(format!("/var/tmp/hc-r4-live-{}", platform::random_hex()));
+        let root = PathBuf::from(format!("/var/tmp/hc-r5-live-{}", platform::random_hex()));
         let core = recovery::test_core_at(&root);
         let script = root.join("devin");
         let source = if reply == Reply::Opaque {
             "import ctypes, pathlib, sys\nsys.stdin.readline()\nassert ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) == 0\npathlib.Path(__file__).with_name('opaque-ready').touch()\nsys.stdin.readline()\n"
+        } else if reply == Reply::Zombie {
+            "import os, pathlib, sys, time\nwhile not pathlib.Path(__file__).with_name('foreground-ready').exists(): time.sleep(.01)\nsys.stdin.readline()\nos._exit(0)\n"
         } else {
             "#!/bin/sh\nread line\n"
         };
@@ -47,6 +50,30 @@ impl LiveHolder {
                 "-c".into(),
                 "set -m; sh \"$1\"; read line".into(),
                 "hc-test-shell".into(),
+                script.display().to_string(),
+            ]
+        } else if reply == Reply::Zombie {
+            vec![
+                "python3".into(),
+                "-c".into(),
+                r#"import os, pathlib, signal, sys, time
+root = pathlib.Path(sys.argv[1]).parent
+signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    os.setpgid(0, 0)
+    os.execvp('python3', ['python3', sys.argv[1]])
+try: os.setpgid(pid, pid)
+except PermissionError: pass
+assert os.getpgid(pid) == pid
+os.tcsetpgrp(0, pid)
+(root / 'foreground-ready').touch()
+while not (root / 'reap').exists(): time.sleep(.01)
+os.waitpid(pid, 0)
+(root / 'reaped').touch()
+while True: time.sleep(1)
+"#
+                .into(),
                 script.display().to_string(),
             ]
         } else {
@@ -219,6 +246,18 @@ impl LiveHolder {
         }
         if let Some(server) = self.server.take() {
             server.join().unwrap();
+        }
+        if self.reply == Reply::Zombie && self.agent.is_some() {
+            // Let the live wrapper reap its owned child before killing it,
+            // including when an assertion unwinds before the child exits.
+            if let Ok(mut writer) = self.pty.writer() {
+                let _ = io::Write::write_all(&mut writer, b"\n");
+            }
+            let _ = std::fs::write(self.root.join("reap"), []);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !self.root.join("reaped").exists() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
         }
         if let Some(mut agent) = self.agent.take() {
             self.pty.signal(agent.id(), platform::signal::KILL);
@@ -394,5 +433,41 @@ async fn a_restored_start_stamp_rehydrates_without_a_status_change() {
     live.unchanged(baseline);
     watcher.abort();
     let _ = watcher.await;
+    live.finish().await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn an_unreaped_foreground_leader_withdraws_while_its_wrapper_lives() {
+    use std::io::Write;
+    let mut live = LiveHolder::start(Reply::Zombie).await;
+    let baseline = live.baseline();
+    let child = live.pty.foreground();
+    assert_ne!(child, live.agent.as_ref().unwrap().id() as i32);
+    live.pty.writer().unwrap().write_all(b"\n").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let stat = format!("/proc/{child}/stat");
+    while !std::fs::read_to_string(&stat).unwrap().rsplit_once(") ").unwrap().1.starts_with("Z ") {
+        assert!(Instant::now() < deadline, "the wrapper never left its child unreaped");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(live.pty.foreground(), child, "the positive pgid still names the zombie");
+    assert!(std::fs::read(format!("/proc/{child}/cmdline")).unwrap().is_empty());
+    while word(&live.core, live.id).is_some() {
+        assert!(Instant::now() < deadline, "the real watcher never withdrew the zombie's confirmed root");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    {
+        let st = live.core.lock();
+        let t = &st.reg.terminals[&live.id];
+        assert!(t.is_live(), "this is foreground loss, not a whole-program finish");
+        assert!(t.foreground.is_none());
+        assert_eq!(t.turn, baseline.0 + 1);
+        assert!(t.news > baseline.1);
+    }
+    assert!(live.agent.as_mut().unwrap().try_wait().unwrap().is_none(), "the wrapper is still alive");
+    assert!(std::fs::read_to_string(&stat).unwrap().rsplit_once(") ").unwrap().1.starts_with("Z "));
+    live.stop();
+    assert!(live.root.join("reaped").exists(), "the fixture must reap its child during cleanup");
     live.finish().await;
 }

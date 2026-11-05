@@ -155,8 +155,10 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   malformed reply, any nonpositive pgid (including older holders' -1 OS
   errors), or unavailable Unix process metadata keeps the last observed
   foreground and emits no foreground or inferred-status event. On Linux,
-  only a missing `/proc/<pid>` or ESRCH proves the process gone; permission
-  errors and partial reads are unknown. Linux accepts metadata only for the
+  a missing `/proc/<pid>`, ESRCH or stat state Z (zombie) / X (dead) proves
+  the process gone; permission errors and partial reads of a live process are
+  unknown. A dead leader is absent even if its cmdline is empty or it dies
+  during the metadata reads. Linux accepts metadata only for the
   sampled group leader, with the same stat start time before and after the
   reads. The internal owner key includes that start time, so same-pid reuse
   by the same agent still invalidates the previous owner's verdict. The stamp

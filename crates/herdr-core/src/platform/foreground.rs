@@ -45,15 +45,25 @@ pub(crate) fn read_linux_foreground(
     mut read_stat: impl FnMut() -> io::Result<String>,
     read_metadata: impl FnOnce() -> io::Result<Foreground>,
 ) -> io::Result<Option<Foreground>> {
-    let (_, group, started) = linux_stat(pid, &read_stat()?)?;
+    let (state, group, started) = linux_stat(pid, &read_stat()?)?;
     if group != pid {
         return Err(io::Error::other("sampled foreground pid is not its group leader"));
     }
-    let mut fg = read_metadata()?;
-    let (_, group, after) = linux_stat(pid, &read_stat()?)?;
+    if matches!(state, b'Z' | b'X') {
+        return Ok(None);
+    }
+    let metadata = read_metadata();
+    let (state, group, after) = linux_stat(pid, &read_stat()?)?;
     if group != pid || after != started {
         return Err(io::Error::other("foreground incarnation changed during metadata read"));
     }
+    // A process can die while comm/cmdline/cwd are being read. Validate its
+    // incarnation first, then let positive death evidence override a partial
+    // metadata error. An opaque live process must still stay unknown.
+    if matches!(state, b'Z' | b'X') {
+        return Ok(None);
+    }
+    let mut fg = metadata?;
     fg.started = Some(started);
     Ok(Some(fg))
 }
