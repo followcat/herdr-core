@@ -222,7 +222,9 @@ paths start at your current folder. Prefer explicit paths for remote work.
   confirmation it expires after 30 seconds without counting a turn. Failed
   foreground lookups keep the last observation and emit no change event.
   Nonpositive holder pgids and unreadable Unix process metadata are unknown;
-  returning to a shell is observed through its valid positive pgid.
+  returning to a shell is observed through its valid positive pgid. Linux
+  observations also validate group leadership and the process start stamp;
+  PID reuse invalidates the previous owner's inferred verdict.
 - `blocked` means a person is needed (permission or a question): read the
   screen and ask your user. `send` refuses unless `--force`; don't use it to
   bypass a permission decision. `error`: read why, then send or kill.

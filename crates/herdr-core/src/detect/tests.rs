@@ -519,6 +519,7 @@ fn fg(name: &str, argv: &[&str]) -> Foreground {
         name: name.into(),
         argv: argv.iter().map(|s| s.to_string()).collect(),
         cwd: "/tmp".into(),
+        started: None,
         agent: None,
     }
 }

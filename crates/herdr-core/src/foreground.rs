@@ -17,6 +17,10 @@ pub struct Foreground {
     pub argv: Vec<String>,
     /// Its working directory now (resolved by the OS).
     pub cwd: String,
+    /// Linux process start ticks: an internal incarnation stamp, never wire data.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub started: Option<u64>,
     /// The agent identified when this foreground was observed (fork): `about`
     /// runs `identify` — and its filesystem reads — off the runtime lock, so
     /// code under `Core.state` only ever reads this stored field. Skipped on
@@ -24,6 +28,14 @@ pub struct Foreground {
     #[serde(skip)]
     #[schemars(skip)]
     pub agent: Option<&'static str>,
+}
+
+pub(crate) type Key = (i32, Option<u64>, Option<&'static str>);
+
+impl Foreground {
+    pub(crate) fn key(&self) -> Key {
+        (self.pid, self.started, self.agent)
+    }
 }
 
 /// Readable process facts, for callers that do not need the error distinction.
@@ -69,7 +81,14 @@ impl Core {
                 if let Some(f) = &now {
                     t.last_cwd = Some(f.cwd.clone());
                 }
-                let was = std::mem::replace(&mut t.foreground, now.clone());
+                let mut was = std::mem::replace(&mut t.foreground, now.clone());
+                // Restore the skipped stamp without fabricating a new owner
+                // or wire event. A known previous stamp is never overwritten.
+                if let (Some(was), Some(now)) = (&mut was, &now)
+                    && was.started.is_none()
+                {
+                    was.started = now.started;
+                }
                 if was != now {
                     self.save_soon();
                     self.emit(&mut st, "foreground", id, serde_json::to_value(&now).unwrap_or_default());

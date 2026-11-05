@@ -2,6 +2,8 @@ use super::*;
 
 #[cfg(unix)]
 mod expiry;
+#[cfg(target_os = "linux")]
+mod incarnation;
 #[cfg(unix)]
 mod live_foreground;
 mod recovery;
@@ -220,6 +222,7 @@ fn agent(name: &str) -> crate::foreground::Foreground {
         name: name.into(),
         argv: vec![name.into()],
         cwd: "/work".into(),
+        started: None,
         agent: None,
     };
     fg.agent = crate::detect::identify(&fg); // what `about()` saw at observation

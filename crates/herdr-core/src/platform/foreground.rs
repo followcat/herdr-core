@@ -21,12 +21,12 @@ pub fn observe_foreground(pid: i32) -> io::Result<Option<Foreground>> {
             .map(|a| String::from_utf8_lossy(a).into_owned())
             .collect();
         let cwd = std::fs::read_link(root.join("cwd"))?.display().to_string();
-        let mut fg = Foreground { pid, name: name.trim_end().into(), argv, cwd, agent: None };
+        let mut fg = Foreground { pid, name: name.trim_end().into(), argv, cwd, started: None, agent: None };
         fg.agent = crate::detect::identify(&fg);
         Ok(fg)
     };
-    match read() {
-        Ok(fg) => Ok(Some(fg)),
+    match read_linux_foreground(pid, || std::fs::read_to_string(root.join("stat")), read) {
+        Ok(fg) => Ok(fg),
         Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
         Err(error)
             if error.kind() == io::ErrorKind::NotFound
@@ -36,6 +36,42 @@ pub fn observe_foreground(pid: i32) -> io::Result<Option<Foreground>> {
         }
         Err(error) => Err(error),
     }
+}
+
+/// The validation seam keeps proc reads separate from incarnation decisions.
+#[cfg(target_os = "linux")]
+pub(crate) fn read_linux_foreground(
+    pid: i32,
+    mut read_stat: impl FnMut() -> io::Result<String>,
+    read_metadata: impl FnOnce() -> io::Result<Foreground>,
+) -> io::Result<Option<Foreground>> {
+    let (_, group, started) = linux_stat(pid, &read_stat()?)?;
+    if group != pid {
+        return Err(io::Error::other("sampled foreground pid is not its group leader"));
+    }
+    let mut fg = read_metadata()?;
+    let (_, group, after) = linux_stat(pid, &read_stat()?)?;
+    if group != pid || after != started {
+        return Err(io::Error::other("foreground incarnation changed during metadata read"));
+    }
+    fg.started = Some(started);
+    Ok(Some(fg))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_stat(pid: i32, stat: &str) -> io::Result<(u8, i32, u64)> {
+    let invalid = || io::Error::new(io::ErrorKind::InvalidData, "invalid foreground process stat");
+    // comm can contain spaces and parentheses; only its final ') ' ends it.
+    let (head, rest) = stat.rsplit_once(") ").ok_or_else(invalid)?;
+    let recorded: i32 = head.split_once(" (").ok_or_else(invalid)?.0.parse().map_err(|_| invalid())?;
+    if recorded != pid {
+        return Err(invalid());
+    }
+    let fields: Vec<&str> = rest.split_whitespace().collect();
+    let state = fields.first().filter(|s| s.len() == 1).ok_or_else(invalid)?.as_bytes()[0];
+    let group = fields.get(2).ok_or_else(invalid)?.parse().map_err(|_| invalid())?; // field 5
+    let started = fields.get(19).ok_or_else(invalid)?.parse().map_err(|_| invalid())?; // field 22
+    Ok((state, group, started))
 }
 
 #[cfg(windows)]
@@ -126,7 +162,7 @@ fn windows_about(pid: i32) -> Option<Foreground> {
         })
         .collect();
     unsafe { LocalFree(list.cast()) };
-    let mut fg = Foreground { pid, name, argv, cwd, agent: None };
+    let mut fg = Foreground { pid, name, argv, cwd, started: None, agent: None };
     fg.agent = crate::detect::identify(&fg);
     Some(fg)
 }
@@ -146,7 +182,7 @@ fn macos_about(pid: i32) -> Option<Foreground> {
     }
     let path = unsafe { std::ffi::CStr::from_ptr(vnode.pvi_cdir.vip_path.as_ptr().cast()) };
     let (argv, _) = procargs(pid)?;
-    let mut fg = Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), agent: None };
+    let mut fg = Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), started: None, agent: None };
     fg.agent = crate::detect::identify(&fg);
     Some(fg)
 }

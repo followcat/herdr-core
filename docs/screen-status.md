@@ -156,7 +156,12 @@ relink) rebuilds every screen from the retained tail. Inference survives it:
   errors), or unavailable Unix process metadata keeps the last observed
   foreground and emits no foreground or inferred-status event. On Linux,
   only a missing `/proc/<pid>` or ESRCH proves the process gone; permission
-  errors and partial reads are unknown. macOS similarly requires positive
+  errors and partial reads are unknown. Linux accepts metadata only for the
+  sampled group leader, with the same stat start time before and after the
+  reads. The internal owner key includes that start time, so same-pid reuse
+  by the same agent still invalidates the previous owner's verdict. The stamp
+  is absent from wire/schema/persisted foreground facts and is rehydrated
+  silently on the first valid observation. macOS similarly requires positive
   ESRCH evidence after a failed metadata lookup. Windows metadata lookup
   behaviour is unchanged. A valid positive pgid identifying the shell or a
   different program still withdraws the old owner's status.

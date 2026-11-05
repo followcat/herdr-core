@@ -61,12 +61,20 @@ async fn a_dead_saved_pid_cannot_confirm_a_positive_restored_screen() {
 
 #[tokio::test]
 async fn a_reused_saved_pid_cannot_confirm_a_positive_restored_screen() {
-    // The test executable is alive at this exact pid, but it is not devin.
-    let pid = std::process::id() as i32;
-    assert!(crate::foreground::about(pid).unwrap().agent.is_none());
-    for worker_first in [false, true] {
-        restored_positive_screen_with_stale_pid(pid, worker_first).await;
-    }
+    use std::os::unix::process::CommandExt;
+    // A different program that is a valid group leader: a non-leader now
+    // yields unknown, and its deadline behaviour has a dedicated regression.
+    let mut child = std::process::Command::new("sleep").arg("100").process_group(0).spawn().unwrap();
+    let pid = child.id() as i32;
+    let result = tokio::spawn(async move {
+        for worker_first in [false, true] {
+            restored_positive_screen_with_stale_pid(pid, worker_first).await;
+        }
+    })
+    .await;
+    let _ = child.kill();
+    let _ = child.wait();
+    result.unwrap();
 }
 
 #[tokio::test(start_paused = true)]

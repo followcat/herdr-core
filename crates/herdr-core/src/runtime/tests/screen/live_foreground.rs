@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Reply {
+    Normal,
     Relink,
     Slow,
     Malformed,
@@ -350,5 +351,48 @@ async fn an_agent_returning_to_its_shell_still_withdraws_the_confirmed_root() {
         assert_eq!(fg.pid, shell);
         assert!(fg.agent.is_none());
     }
+    live.finish().await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_restored_start_stamp_rehydrates_without_a_status_change() {
+    let live = LiveHolder::start(Reply::Normal).await;
+    // This fixture's watcher tasks have not run yet. Restore only the
+    // serializable foreground facts, exactly as registry loading does.
+    for task in &live.tasks {
+        task.abort();
+    }
+    let baseline = live.baseline();
+    let stamp = {
+        let mut st = live.core.lock();
+        let fg = st.reg.terminals[&live.id].foreground.as_ref().unwrap();
+        let stamp = fg.started.unwrap();
+        let mut restored: crate::foreground::Foreground =
+            serde_json::from_value(serde_json::to_value(fg).unwrap()).unwrap();
+        assert!(restored.started.is_none());
+        restored.agent = crate::detect::identify(&restored);
+        st.reg.terminals.get_mut(&live.id).unwrap().foreground = Some(restored);
+        st.invalidate_screen(live.id);
+        st.screen_status.get_mut(&live.id).unwrap().foreground_observed = false;
+        st.screen_status.get_mut(&live.id).unwrap().unconfirmed_until =
+            Some(tokio::time::Instant::now() + crate::screen_status::RECONFIRM);
+        stamp
+    };
+    // Drive the actual watcher with the holder's real positive PTY reply.
+    let c = live.core.clone();
+    let id = live.id;
+    let watcher = tokio::spawn(c.clone().watch_foreground());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while c.lock().reg.terminals[&id].foreground.as_ref().unwrap().started.is_none() {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    c.screen_status_pass(&test_detect_catalog()).await;
+    assert_eq!(c.lock().reg.terminals[&id].foreground.as_ref().unwrap().started, Some(stamp));
+    assert!(c.lock().screen_status[&id].unconfirmed_until.is_none());
+    live.unchanged(baseline);
+    watcher.abort();
+    let _ = watcher.await;
     live.finish().await;
 }

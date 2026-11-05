@@ -10,7 +10,7 @@
 //! `Core::report_status` invalidates pending work on any native report.
 
 use crate::detect::{Catalog, Detection, Input, Manifest, State as Verdict, detect};
-use crate::foreground::Foreground;
+use crate::foreground::{Foreground, Key};
 use crate::runtime::{Core, State};
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
@@ -59,9 +59,9 @@ impl ScreenWatch {
 struct Token {
     /// The hc-owned program: pid plus its start stamp (a restart is a new program).
     program: Option<(u32, Option<u64>)>,
-    /// Foreground identity: the leader's pid and its identified agent. A cwd
+    /// Foreground identity: the leader's pid, start stamp and identified agent. A cwd
     /// move alone does not change it.
-    foreground: Option<(i32, Option<&'static str>)>,
+    foreground: Option<Key>,
     seq: u64,
     size: (u16, u16),
     /// The manifest generation: its `Arc` address while the catalog lives.
@@ -209,7 +209,7 @@ impl Core {
                 t.reported,
                 t.foreground.as_ref().and_then(|f| f.agent),
                 t.pid.map(|pid| (pid, t.program_started_ms)),
-                t.foreground.as_ref().map(|f| (f.pid, f.agent)),
+                t.foreground.as_ref().map(Foreground::key),
             )
         }) else {
             st.screen_status.remove(&id);
@@ -306,7 +306,7 @@ impl Core {
         let agent = t.foreground.as_ref().and_then(|f| f.agent);
         let now = Token {
             program: t.pid.map(|pid| (pid, t.program_started_ms)),
-            foreground: t.foreground.as_ref().map(|f| (f.pid, f.agent)),
+            foreground: t.foreground.as_ref().map(Foreground::key),
             seq: st.output_seq.get(&snap.id).copied().unwrap_or(0),
             size: st.screens.get(&snap.id).map_or((0, 0), |s| s.size()),
             manifest: agent.and_then(|a| catalog.get(a)).map_or(0, |m| Arc::as_ptr(&m) as usize),
@@ -367,14 +367,14 @@ impl Core {
     }
 
     /// The foreground watcher saw a new foreground on `id`. An agent or
-    /// leader-pid change drops cached work and withdraws the old owner's
+    /// leader incarnation change drops cached work and withdraws the old owner's
     /// verdict — process loss never means "done". A cwd move alone keeps both.
     pub(crate) fn foreground_changed(&self, st: &mut State, id: u32, was: Option<&Foreground>) {
         if !st.reg.terminals.contains_key(&id) {
             return;
         }
         st.screen_status.entry(id).or_default().foreground_observed = true;
-        let key = |f: Option<&Foreground>| f.map(|f| (f.pid, f.agent));
+        let key = |f: Option<&Foreground>| f.map(Foreground::key);
         if key(was) == key(st.reg.terminals.get(&id).and_then(|t| t.foreground.as_ref())) {
             return;
         }
