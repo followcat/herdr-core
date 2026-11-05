@@ -4,6 +4,8 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+pub mod probe;
+
 const SMALL_FILE: u64 = 64 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

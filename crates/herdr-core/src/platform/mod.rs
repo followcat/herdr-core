@@ -10,6 +10,16 @@ mod unix;
 #[cfg(unix)]
 pub use unix::*;
 
+#[cfg(unix)]
+mod unix_repository;
+#[cfg(unix)]
+pub use unix_repository::*;
+
+#[cfg(windows)]
+mod windows_repository;
+#[cfg(windows)]
+pub use windows_repository::*;
+
 #[cfg(target_os = "linux")]
 pub mod systemd;
 
