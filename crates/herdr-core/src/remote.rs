@@ -23,6 +23,12 @@ type Sink = (Arc<Conn>, u32);
 type Waiting = (oneshot::Sender<Value>, Option<(Sink, bool)>);
 
 mod identity;
+mod line;
+mod mirror;
+#[cfg(test)]
+use mirror::mirror_event;
+pub use mirror::rename_mirror;
+use mirror::{mirror_events, mirror_replace};
 mod viewers;
 #[cfg(test)]
 use viewers::automatic_input;
@@ -49,95 +55,6 @@ pub struct Line {
     mirror: Mutex<(u64, Option<u32>, Vec<u8>)>,
     /// What the core there said it can do (its `hello`).
     features: Vec<String>,
-}
-
-impl Line {
-    fn new(frames: mpsc::UnboundedSender<Vec<u8>>, hello: &Value) -> Arc<Line> {
-        let features = hello["features"].as_array().into_iter().flatten();
-        Arc::new(Line {
-            features: features.filter_map(|f| f.as_str().map(String::from)).collect(),
-            frames,
-            pending: Mutex::default(),
-            streams: Mutex::default(),
-            next: AtomicU64::new(2),
-            mirror: Mutex::default(),
-        })
-    }
-
-    /// A reply to one of our calls: to whoever waits for it.
-    fn take_reply(&self, mut reply: Value) {
-        let Some((waiter, sink)) = reply["id"].as_u64().and_then(|id| lock(&self.pending).remove(&id)) else { return };
-        if let (Some((sink, require_resize)), Some(there)) = (sink, reply["result"]["channel"].as_u64()) {
-            if require_resize && reply["result"]["resize_notifications"] != true {
-                let _ = self.frames.send(wire::encode(there as u32, wire::CLOSE, b""));
-                reply = crate::rpc::response(
-                    reply["id"].clone(),
-                    Err(RpcError::new("unavailable", RESIZE_LOST, "attach again")),
-                );
-            } else {
-                lock(&self.streams).insert(there as u32, sink);
-            }
-        }
-        let _ = waiter.send(reply);
-    }
-
-    fn message(&self, message: &Value) {
-        let _ = self.frames.send(wire::encode(0, wire::DATA, message.to_string().as_bytes()));
-    }
-
-    /// A call that gets `deadline` to answer: a stuck machine never holds us.
-    pub async fn call(
-        &self,
-        machine: &str,
-        method: &str,
-        params: Value,
-        deadline: Duration,
-    ) -> Result<Value, RpcError> {
-        self.call_into(machine, method, params, None, deadline).await
-    }
-
-    /// A call whose reply may open a stream (`channel`): it goes to `sink`
-    /// from its first byte.
-    async fn call_into(
-        &self,
-        machine: &str,
-        method: &str,
-        params: Value,
-        sink: Option<(Sink, bool)>,
-        deadline: Duration,
-    ) -> Result<Value, RpcError> {
-        let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let req = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string();
-        // Too big for one frame would end the whole line: refuse just this call.
-        if req.len() > wire::MAX_PAYLOAD {
-            return Err(RpcError::invalid_params(format!(
-                "too big to send to {machine} ({} MB at most)",
-                wire::MAX_PAYLOAD >> 20
-            )));
-        }
-        let (tx, rx) = oneshot::channel();
-        lock(&self.pending).insert(id, (tx, sink));
-        let _ = self.frames.send(wire::encode(0, wire::DATA, req.as_bytes()));
-        let _asked = Asked { line: self, id };
-        let Ok(reply) = tokio::time::timeout(deadline, rx).await else {
-            return Err(RpcError::new(
-                "unavailable",
-                format!("{machine} didn't answer within {} s", deadline.as_secs()),
-                "it may be busy or stuck; hc machine ls shows its line",
-            ));
-        };
-        let reply = reply.map_err(|_| {
-            RpcError::new(
-                "unavailable",
-                format!("lost the line to {machine} during the call"),
-                "it may have happened there; check, then retry",
-            )
-        })?;
-        match reply.get("error") {
-            Some(e) => Err(RpcError::from_json(e)),
-            None => Ok(reply["result"].clone()),
-        }
-    }
 }
 
 /// A call on its way: given up on (its deadline passed, or its caller went
@@ -393,125 +310,6 @@ async fn hold(core: &Arc<Core>, m: &Machine, mut d: crate::machines::Dialed) {
     // Killed, not waited for: a Mac core once never heard the old ssh had
     // died and stayed "connecting" for good. It is reaped in the background.
     let _ = d.child.start_kill();
-}
-
-/// A machine's terminals now (after a connect, or after it says we missed
-/// some): subscribers here hear what appeared, changed or went.
-fn mirror_replace(core: &Core, m: &Machine, terminals: Vec<Value>) {
-    let mut st = core.lock();
-    let Some(name) = st.machines.iter().find(|current| current.id == m.id).map(|m| m.name.clone()) else { return };
-    let fresh: std::collections::BTreeMap<String, Value> = terminals
-        .into_iter()
-        .map(|t| localize_in(core, &st, &name, &[], t))
-        .map(|t| (t["address"].as_str().unwrap_or_default().to_string(), t))
-        .collect();
-    let old = st.mirrors.remove(&m.id).unwrap_or_default();
-    for (address, record) in old.iter().filter(|(a, _)| !fresh.contains_key(*a)) {
-        core.deliver(&mut st, "removed", address, json!({}), record, Some(record));
-    }
-    for (address, record) in fresh.iter().filter(|(a, r)| old.get(*a) != Some(*r)) {
-        core.deliver(&mut st, "created", address, record.clone(), record, None);
-    }
-    st.mirrors.insert(m.id.clone(), fresh);
-}
-
-pub fn rename_mirror(core: &Core, st: &mut State, id: &str, old: &str, new: &str) {
-    let Some(records) = st.mirrors.remove(id) else { return };
-    let mut renamed = std::collections::BTreeMap::new();
-    for record in records.values() {
-        let mut record = record.clone();
-        map_addresses(&mut record, &|s| match s.split_once('/') {
-            Some((prefix, rest)) if prefix == old => format!("{new}/{rest}"),
-            _ => s.to_owned(),
-        });
-        let address = record["address"].as_str().unwrap_or_default().to_owned();
-        renamed.insert(address, record);
-    }
-    st.mirrors.insert(id.to_owned(), renamed.clone());
-    for (address, record) in records {
-        core.deliver(st, "removed", &address, json!({}), &record, Some(&record));
-    }
-    for (address, record) in renamed {
-        core.deliver(st, "created", &address, record.clone(), &record, None);
-    }
-}
-
-/// Event lines from a machine: applied to its mirror, passed on as seen from here.
-fn mirror_events(core: &Core, m: &Machine, line: &Line, payload: &[u8]) {
-    let lines: Vec<Vec<u8>> = {
-        let mut mirror = lock(&line.mirror);
-        mirror.2.extend_from_slice(payload);
-        let whole = mirror.2.iter().rposition(|b| *b == b'\n').map_or(0, |at| at + 1);
-        let done: Vec<u8> = mirror.2.drain(..whole).collect();
-        done.split(|b| *b == b'\n').filter(|l| !l.is_empty()).map(<[u8]>::to_vec).collect()
-    };
-    for l in lines {
-        let Ok(msg) = serde_json::from_slice::<Value>(&l) else { continue };
-        match msg["method"].as_str() {
-            Some("event") => mirror_event(core, m, msg["params"].clone()),
-            Some("missed") => {
-                mirror_replace(core, m, msg["params"]["terminals"].as_array().cloned().unwrap_or_default());
-                core.documents_missed(&mut core.lock());
-            }
-            _ => {}
-        }
-    }
-}
-
-fn mirror_event(core: &Core, m: &Machine, p: Value) {
-    let mut st = core.lock();
-    let Some(name) = st.machines.iter().find(|current| current.id == m.id).map(|m| m.name.clone()) else { return };
-    let p = localize_in(core, &st, &name, &[], p);
-    let (kind, address, data) =
-        (p["type"].as_str().unwrap_or_default(), p["terminal"].as_str().unwrap_or_default(), p["data"].clone());
-    if kind == "doc" {
-        // Only this machine, not docs it in turn watches on a third core.
-        if p.get("machine").is_none() {
-            core.doc_event(&mut st, data, Some(&name));
-        }
-        return;
-    }
-    let mirror = st.mirrors.entry(m.id.clone()).or_default();
-    let (record, was) = match kind {
-        "created" | "restarted" => {
-            mirror.insert(address.into(), data.clone());
-            (data.clone(), None)
-        }
-        "removed" => match mirror.remove(address) {
-            Some(record) => (record.clone(), Some(record)),
-            None => return,
-        },
-        _ => {
-            let Some(record) = mirror.get_mut(address) else { return };
-            let was = record.clone();
-            apply(record, kind, &data);
-            (record.clone(), Some(was))
-        }
-    };
-    core.deliver(&mut st, kind, address, data, &record, was.as_ref());
-}
-
-/// An event's change, applied to a terminal record (see schema/README.md).
-fn apply(record: &mut Value, kind: &str, data: &Value) {
-    let set = |record: &mut Value, keys: &[&str]| keys.iter().for_each(|k| record[*k] = data[*k].clone());
-    match kind {
-        "finished" | "lost" => {
-            record["state"] = if kind == "lost" { "live" } else { "finished" }.into();
-            if kind == "lost" {
-                record["pid"] = Value::Null;
-            }
-            set(record, &["reason", "exit_code", "signal", "finished_ms"]);
-            record.as_object_mut().map(|r| r.remove("foreground"));
-        }
-        "status" => set(record, &["status", "records", "reported"]),
-        "turn" => set(record, &["turn"]),
-        "title" => set(record, &["title"]),
-        "labels" => set(record, &["labels"]),
-        "keep" => set(record, &["keep"]),
-        "size" => set(record, &["cols", "rows"]),
-        "foreground" => record["foreground"] = data.clone(),
-        _ => {}
-    }
 }
 
 /// What a machine may ask of terminals here that are parents of its own.
