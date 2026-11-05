@@ -158,7 +158,9 @@ while True: time.sleep(1)
                 }
                 seen.fetch_add(1, Ordering::SeqCst);
                 if reply == Reply::Slow {
-                    std::thread::sleep(Duration::from_millis(1200));
+                    // Withhold every reply. A delayed reply could win a
+                    // scheduling race after both it and the timeout are ready.
+                    continue;
                 }
                 let response = if reply == Reply::Malformed {
                     proto::frame(proto::FOREGROUND_IS, id, b"not json")
