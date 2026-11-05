@@ -91,13 +91,6 @@ pub fn unknown(machines: &[Machine], name: &str) -> crate::rpc::RpcError {
     crate::rpc::RpcError::new("machine_unknown", format!("unknown machine {name:?}"), hint)
 }
 
-pub fn save(state: &Path, machines: &[Machine]) {
-    let bytes = serde_json::to_vec_pretty(machines).expect("machines serialize");
-    if let Err(e) = crate::paths::write_atomic(&state.join("machines.json"), &bytes) {
-        eprintln!("core: cannot save machines: {e}");
-    }
-}
-
 /// `can@rohan:2222`, as people write a port, in the form ssh takes it
 /// (`ssh://can@rohan:2222`): ssh reads a plain `rohan:2222` as a host name.
 pub fn ssh_target(target: String) -> String {

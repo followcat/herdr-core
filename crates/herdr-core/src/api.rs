@@ -576,42 +576,45 @@ async fn machine_add(core: Ctx<'_>, p: MachineAddParams) -> Result<crate::machin
     name(&core.lock())?;
     let hello = crate::machines::hello(&core.paths, to, p.session.as_deref()).await?;
     let text = |k: &str| hello["core"][k].as_str().unwrap_or_default().to_string();
-    let mut st = core.lock();
-    let machine = crate::machines::Machine {
-        name: name(&st)?,
-        target,
-        via,
-        temporary: p.temporary,
-        session: p.session,
-        id: text("id"),
-        host: text("name"),
-        hostname: hello["core"]["hostname"].as_str().filter(|s| !s.is_empty()).map(String::from),
-        version: hello["version"].as_str().unwrap_or_default().into(),
-    };
-    if machine.id == core.info.id {
-        return Err(RpcError::invalid_params(format!("{} is this core", machine.target))
-            .with_hint("add another machine, or another --session"));
-    }
-    if let Some(m) = st.machines.iter().find(|m| m.id == machine.id) {
-        // Reached another way yet the same core: a copy of that machine's disk
-        // whose system kept its machine id (some container images).
-        if (m.target.as_str(), m.via) != (machine.target.as_str(), machine.via) {
+    let machine = {
+        let mut st = core.lock();
+        let machine = crate::machines::Machine {
+            name: name(&st)?,
+            target,
+            via,
+            temporary: p.temporary,
+            session: p.session,
+            id: text("id"),
+            host: text("name"),
+            hostname: hello["core"]["hostname"].as_str().filter(|s| !s.is_empty()).map(String::from),
+            version: hello["version"].as_str().unwrap_or_default().into(),
+        };
+        if machine.id == core.info.id {
+            return Err(RpcError::invalid_params(format!("{} is this core", machine.target))
+                .with_hint("add another machine, or another --session"));
+        }
+        if let Some(m) = st.machines.iter().find(|m| m.id == machine.id) {
+            // Reached another way yet the same core: a copy of that machine's disk
+            // whose system kept its machine id (some container images).
+            if (m.target.as_str(), m.via) != (machine.target.as_str(), machine.via) {
+                return Err(RpcError::new(
+                    "already_added",
+                    format!("{} answers as {}'s core: it looks like a copy of {}", machine.target, m.name, m.name),
+                    "on the copy, stop hc and delete its core.json in hc's state folder, then add it again",
+                ));
+            }
             return Err(RpcError::new(
                 "already_added",
-                format!("{} answers as {}'s core: it looks like a copy of {}", machine.target, m.name, m.name),
-                "on the copy, stop hc and delete its core.json in hc's state folder, then add it again",
+                format!("that core is already added as {}", m.name),
+                format!("rename it: hc machine rename {} <name>", m.name),
             ));
         }
-        return Err(RpcError::new(
-            "already_added",
-            format!("that core is already added as {}", m.name),
-            format!("rename it: hc machine rename {} <name>", m.name),
-        ));
-    }
-    st.machines.push(machine.clone());
-    crate::machines::save(&core.paths.state, &st.machines);
-    drop(st);
+        st.machines.push(machine.clone());
+        core.save_machines(&st);
+        machine
+    };
     crate::remote::keep_up(core.core, machine.id.clone());
+    core.flush_machines().await?;
     Ok(machine)
 }
 
@@ -638,36 +641,43 @@ async fn machine_connect(core: Ctx<'_>, p: MachineParams) -> Result<crate::remot
 }
 
 async fn machine_rename(core: Ctx<'_>, p: MachineRenameParams) -> Result<crate::machines::Machine, RpcError> {
-    let mut st = core.lock();
-    let i = st
-        .machines
-        .iter()
-        .position(|m| m.name == p.machine)
-        .ok_or_else(|| crate::machines::unknown(&st.machines, &p.machine))?;
-    if p.new_name != p.machine {
-        free_name(core, &st, &p.new_name)?;
-    }
-    let id = st.machines[i].id.clone();
-    st.machines[i].name = p.new_name.clone();
-    if p.new_name != p.machine {
-        crate::remote::rename_mirror(core, &mut st, &id, &p.machine, &p.new_name);
-    }
-    crate::machines::save(&core.paths.state, &st.machines);
-    Ok(st.machines[i].clone())
+    let renamed = {
+        let mut st = core.lock();
+        let i = st
+            .machines
+            .iter()
+            .position(|m| m.name == p.machine)
+            .ok_or_else(|| crate::machines::unknown(&st.machines, &p.machine))?;
+        if p.new_name != p.machine {
+            free_name(core, &st, &p.new_name)?;
+        }
+        let id = st.machines[i].id.clone();
+        st.machines[i].name = p.new_name.clone();
+        if p.new_name != p.machine {
+            crate::remote::rename_mirror(core, &mut st, &id, &p.machine, &p.new_name);
+        }
+        core.save_machines(&st);
+        st.machines[i].clone()
+    };
+    core.flush_machines().await?;
+    Ok(renamed)
 }
 
 async fn machine_rm(core: Ctx<'_>, p: MachineParams) -> Result<RemoveResult, RpcError> {
-    let mut st = core.lock();
-    let i = st
-        .machines
-        .iter()
-        .position(|m| m.name == p.machine)
-        .ok_or_else(|| crate::machines::unknown(&st.machines, &p.machine))?;
-    let gone = st.machines.remove(i);
-    crate::remote::forget(core, &mut st, &gone.id);
-    crate::machines::save(&core.paths.state, &st.machines);
-    let last_on_target = !st.machines.iter().any(|m| m.target == gone.target);
-    drop(st);
+    let (gone, last_on_target) = {
+        let mut st = core.lock();
+        let i = st
+            .machines
+            .iter()
+            .position(|m| m.name == p.machine)
+            .ok_or_else(|| crate::machines::unknown(&st.machines, &p.machine))?;
+        let gone = st.machines.remove(i);
+        crate::remote::forget(core, &mut st, &gone.id);
+        core.save_machines(&st);
+        let last_on_target = !st.machines.iter().any(|m| m.target == gone.target);
+        (gone, last_on_target)
+    };
+    core.flush_machines().await?;
     if last_on_target {
         crate::machines::logout(&core.paths, gone.reach());
     }

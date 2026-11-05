@@ -30,6 +30,12 @@ hc machine add user@host --name sandbox --session scratch
 
 Sessions separate terminals and state, not permissions. See [security](security.md).
 
+The fork's observed hostname/version refresh is saved in order with machine add, rename and
+removal. A stalled machine-state write leaves terminal IO and read/status APIs responsive.
+Machine mutation replies wait outside the runtime lock for their queued snapshot, up to ten
+seconds. On a persistence timeout, check the machine before retrying: the change may already
+have happened. Completed write failures are logged, as before.
+
 ## Use another way in
 
 A custom connection command receives a shell line as its last argument.

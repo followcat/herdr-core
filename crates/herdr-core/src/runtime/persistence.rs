@@ -1,4 +1,4 @@
-//! Ordered registry persistence, without disk IO on the core state lock.
+//! Ordered state-file persistence, without disk IO on the core state lock.
 use crate::paths::write_atomic;
 use std::io;
 use std::path::PathBuf;
@@ -6,7 +6,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use tokio::sync::watch;
 
-pub(super) struct RegistryWriter {
+pub(super) struct StateWriter {
     queue: Arc<(Mutex<Pending>, Condvar)>,
     completed: watch::Receiver<u64>,
     worker: Option<JoinHandle<()>>,
@@ -19,23 +19,25 @@ struct Pending {
     closed: bool,
 }
 
-impl RegistryWriter {
+impl StateWriter {
     pub fn new(path: PathBuf) -> io::Result<Self> {
-        Self::start(move |bytes| write_atomic(&path, bytes))
+        Self::start(move |bytes| {
+            write_atomic(&path, bytes).map_err(|e| io::Error::other(format!("{}: {e}", path.display())))
+        })
     }
 
     pub(super) fn start(mut write: impl FnMut(&[u8]) -> io::Result<()> + Send + 'static) -> io::Result<Self> {
         let queue = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let (done, completed) = watch::channel(0);
         let work = queue.clone();
-        let worker = std::thread::Builder::new().name("registry-writer".into()).spawn(move || {
+        let worker = std::thread::Builder::new().name("state-writer".into()).spawn(move || {
             let (mutex, changed) = &*work;
             let mut pending = mutex.lock().unwrap();
             loop {
                 if let Some((version, bytes)) = pending.latest.take() {
                     drop(pending);
                     if let Err(e) = write(&bytes) {
-                        eprintln!("core: cannot save terminals: {e}");
+                        eprintln!("core: cannot save state: {e}");
                     }
                     done.send_replace(version);
                     pending = mutex.lock().unwrap();
@@ -70,7 +72,7 @@ impl RegistryWriter {
     }
 }
 
-impl Drop for RegistryWriter {
+impl Drop for StateWriter {
     fn drop(&mut self) {
         let (mutex, changed) = &*self.queue;
         mutex.lock().unwrap().closed = true;
@@ -91,7 +93,7 @@ mod tests {
     fn a_slow_write_keeps_only_the_newest_pending_snapshot_and_drop_flushes_it() {
         let (started, writes) = mpsc::channel();
         let (release, blocked) = mpsc::channel();
-        let writer = RegistryWriter::start(move |bytes| {
+        let writer = StateWriter::start(move |bytes| {
             started.send(bytes.to_vec()).unwrap();
             blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             Ok(())
@@ -121,7 +123,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("hc-writer-{}", crate::platform::random_hex()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("terminals.json");
-        let writer = RegistryWriter::new(path.clone()).unwrap();
+        let writer = StateWriter::new(path.clone()).unwrap();
         writer.save(b"first".to_vec());
         writer.save(b"last".to_vec());
         writer.flush().await.unwrap();
@@ -135,7 +137,7 @@ mod tests {
     async fn a_flush_does_not_wait_for_later_snapshots() {
         let (started, writes) = mpsc::channel();
         let (release, blocked) = mpsc::channel();
-        let writer = RegistryWriter::start(move |bytes| {
+        let writer = StateWriter::start(move |bytes| {
             started.send(bytes.to_vec()).unwrap();
             blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             Ok(())
@@ -160,7 +162,7 @@ mod tests {
     async fn a_flush_can_be_cancelled_and_a_failed_write_does_not_fail_the_barrier() {
         let (started, writes) = mpsc::channel();
         let (release, blocked) = mpsc::channel();
-        let writer = RegistryWriter::start(move |_| {
+        let writer = StateWriter::start(move |_| {
             started.send(()).unwrap();
             blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             Err(io::Error::other("disk failed"))

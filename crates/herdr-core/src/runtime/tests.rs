@@ -77,7 +77,7 @@ async fn server_exit_flushes_even_when_background_tasks_still_own_core() {
     let (mut core, root) = test_core();
     core.flush_saved().await.unwrap();
     let (release, blocked) = mpsc::channel();
-    Arc::get_mut(&mut core).unwrap().registry_writer = RegistryWriter::start(move |_| {
+    Arc::get_mut(&mut core).unwrap().registry_writer = StateWriter::start(move |_| {
         blocked.recv_timeout(Duration::from_secs(5)).unwrap();
         Ok(())
     })
@@ -102,7 +102,7 @@ async fn server_stop_succeeds_even_when_the_registry_flush_times_out() {
     core.flush_saved().await.unwrap();
     let (release, blocked) = mpsc::channel();
     let mut first = true;
-    Arc::get_mut(&mut core).unwrap().registry_writer = RegistryWriter::start(move |_| {
+    Arc::get_mut(&mut core).unwrap().registry_writer = StateWriter::start(move |_| {
         if first {
             first = false;
             blocked.recv_timeout(Duration::from_secs(15)).unwrap();
@@ -140,7 +140,7 @@ async fn label_and_kill_reply_with_the_record_observed_before_flushing() {
         let (mut core, root) = test_core();
         core.flush_saved().await.unwrap();
         let (release, blocked) = mpsc::channel();
-        Arc::get_mut(&mut core).unwrap().registry_writer = RegistryWriter::start(move |_| {
+        Arc::get_mut(&mut core).unwrap().registry_writer = StateWriter::start(move |_| {
             blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             Ok(())
         })
@@ -211,6 +211,61 @@ fn a_blocked_registry_write_does_not_hold_the_core_lock() {
     drop(reader);
     remove_root(&root);
     assert!(returned && unlocked, "saving to a stalled disk must leave output and input free to take the core lock");
+}
+
+#[tokio::test]
+async fn queued_machine_snapshots_cannot_restore_a_machine_after_rename_and_removal() {
+    let (mut core, root) = test_core();
+    let (started, writes) = mpsc::channel();
+    let (release, blocked) = mpsc::channel();
+    Arc::get_mut(&mut core).unwrap().machines_writer = StateWriter::start(move |bytes| {
+        started.send(bytes.to_vec()).unwrap();
+        blocked.recv_timeout(Duration::from_secs(5)).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    {
+        let mut st = core.lock();
+        st.machines.push(
+            serde_json::from_value(json!({"name":"away","target":"host-a","session":null,
+            "id":"there","host":"alice-dev","hostname":"host-b","version":"v2"}))
+            .unwrap(),
+        );
+        core.save_machines(&st);
+    }
+    let first: serde_json::Value =
+        serde_json::from_slice(&writes.recv_timeout(Duration::from_secs(1)).unwrap()).unwrap();
+    assert_eq!(first[0]["hostname"], "host-b");
+    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    // Cancel only the replies while the first write is held: both mutations
+    // must still enter the same ordered queue under Core.state.
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(20),
+            crate::api::dispatch(&call, "machine.rename", json!({"machine":"away","new_name":"renamed"}))
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(core.lock().machines[0].name, "renamed");
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(20),
+            crate::api::dispatch(&call, "machine.rm", json!({"machine":"renamed"}))
+        )
+        .await
+        .is_err()
+    );
+    assert!(core.lock().machines.is_empty());
+    release.send(()).unwrap();
+    let final_snapshot: serde_json::Value =
+        serde_json::from_slice(&writes.recv_timeout(Duration::from_secs(1)).unwrap()).unwrap();
+    assert_eq!(final_snapshot, json!([]));
+    assert!(writes.try_recv().is_err(), "an older hostname/rename snapshot cannot follow removal");
+    release.send(()).unwrap();
+    core.flush_machines().await.unwrap();
+    drop(core);
+    remove_root(&root);
 }
 
 #[test]

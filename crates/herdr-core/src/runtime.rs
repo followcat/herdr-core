@@ -19,7 +19,7 @@ use tokio::sync::{Notify, oneshot};
 
 mod holders;
 mod persistence;
-use persistence::RegistryWriter;
+use persistence::StateWriter;
 
 /// Outcome acknowledgements for real-time tests; absent from production.
 #[cfg(test)]
@@ -56,7 +56,8 @@ pub struct Core {
     /// The registry changed in a way a crash may lose: `save_soon` writes it shortly.
     dirty: std::sync::atomic::AtomicBool,
     save_due: Notify,
-    registry_writer: RegistryWriter,
+    registry_writer: StateWriter,
+    machines_writer: StateWriter,
 }
 
 #[derive(Default)]
@@ -258,7 +259,8 @@ impl Core {
             started: Instant::now(),
             stop: Notify::new(),
             restart: Default::default(),
-            registry_writer: RegistryWriter::new(paths.state.join("terminals.json"))?,
+            registry_writer: StateWriter::new(paths.state.join("terminals.json"))?,
+            machines_writer: StateWriter::new(paths.state.join("machines.json"))?,
             paths,
             state: Mutex::new(State { reg, docs, machines, peers, ..Default::default() }),
             #[cfg(test)]
@@ -301,6 +303,25 @@ impl Core {
         self.dirty.store(false, std::sync::atomic::Ordering::SeqCst);
         let bytes = serde_json::to_vec(&st.reg).expect("registry serializes");
         self.registry_writer.save(bytes);
+    }
+
+    /// Queue under Core.state so hostname refresh, rename and removal persist
+    /// in their observed order. The writer performs all filesystem IO.
+    pub(crate) fn save_machines(&self, st: &State) {
+        self.machines_writer.save(serde_json::to_vec_pretty(&st.machines).expect("machines serialize"));
+    }
+
+    pub(crate) async fn flush_machines(&self) -> Result<(), crate::rpc::RpcError> {
+        tokio::time::timeout(Duration::from_secs(10), self.machines_writer.flush())
+            .await
+            .map_err(|_| {
+                crate::rpc::RpcError::new(
+                    "unavailable",
+                    "machine persistence timed out; the operation may already have completed",
+                    "check the machine and disk before retrying",
+                )
+            })?
+            .map_err(|e| crate::rpc::RpcError::internal(format!("cannot save machines: {e}")))
     }
 
     /// Acknowledged mutations wait here without holding the state lock or blocking the executor.

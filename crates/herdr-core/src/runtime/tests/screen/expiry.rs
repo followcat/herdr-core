@@ -7,7 +7,7 @@ async fn expire_many(catalog: crate::detect::Catalog, must_yield: bool) {
     const COUNT: usize = 512;
     let (mut core, root) = test_core();
     let (record, mut written) = tokio::sync::mpsc::unbounded_channel();
-    Arc::get_mut(&mut core).unwrap().registry_writer = RegistryWriter::start(move |bytes| {
+    Arc::get_mut(&mut core).unwrap().registry_writer = StateWriter::start(move |bytes| {
         record.send(bytes.to_vec()).unwrap();
         Ok(())
     })
