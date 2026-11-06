@@ -7,7 +7,7 @@
 //! - working -> blocked -> idle/done: completion (the work guard survives blocked);
 //! - working -> error/unknown -> idle/done: no completion (wrong predecessor);
 //! - after acquiring idle/done, blocked -> idle/done: completion;
-//! - repeated word or metadata-only report: no new ordinal/completion;
+//! - repeated word, adjacent idle/done alias or metadata-only report: retain clocks;
 //! - clear, subtree removal/eviction, withdrawal, exit/loss or owner replacement:
 //!   clear the marker, never complete work. A clear starts acquisition again.
 //!
@@ -200,14 +200,16 @@ pub(crate) fn observe(t: &mut Terminal, counter: &mut u64, core: &str, epoch: &s
         if word.as_deref() == Some("working") && matches!(evidence,Evidence::Fresh(fresh) if fresh==id) {
             guard.work = true;
         }
-        if guard.word == word {
+        let endpoint = matches!(word.as_deref(), Some("idle" | "done"));
+        if guard.word == word || (endpoint && matches!(guard.word.as_deref(), Some("idle" | "done"))) {
+            // Readiness spelling changes no chronology or acquisition/work guard.
+            guard.word = word;
             continue;
         }
         let Some(ordinal) = next(counter) else {
             t.activity = None;
             return true;
         };
-        let endpoint = matches!(word.as_deref(), Some("idle" | "done"));
         let completed = endpoint
             && matches!(guard.word.as_deref(), Some("working" | "blocked"))
             && (!guard.acquiring || guard.work);

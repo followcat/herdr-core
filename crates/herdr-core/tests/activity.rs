@@ -11,10 +11,15 @@ fn session() -> Session {
 }
 
 fn word(s: &Session, t: &str, state: &str) -> Value {
+    record_word(s, t, "", state)
+}
+
+fn record_word(s: &Session, t: &str, id: &str, state: &str) -> Value {
     let mut got = Value::Null;
     wait_until(state, || {
         got = get(s, t);
-        got["status"]["state"] == state
+        let status = if id.is_empty() { &got["status"] } else { &got["records"][id] };
+        status["state"] == state
     });
     got
 }
@@ -31,7 +36,7 @@ fn activity_is_atomic_with_status_and_scopes_clear_done_without_reinterpreting_l
     );
     let mut events = s.connect();
     events.call(2, "events.subscribe", json!({}));
-    let body = "r state=blocked:app=agent-a; w a; r state=idle:app=agent-a; w b; r state=working:app=agent-a; w c; r state=blocked:app=agent-a; w d; r state=idle:app=agent-a; w e; r state=idle:app=agent-b; w f";
+    let body = "r state=blocked:app=agent-a; w a; r state=idle:app=agent-a; w b; r state=working:app=agent-a; w c; r state=blocked:app=agent-a; w d; r state=idle:app=agent-a; w e; r state=done:app=agent-a; w alias_done; r state=idle:app=agent-a; w alias_idle; r state=idle:app=agent-b; w f";
     let t = run(&s, &["--cwd", s.root.to_str().unwrap(), "sh", "-c", &script(&s, body)]);
     word(&s, &t, "blocked");
     touch(&s, "a");
@@ -51,7 +56,17 @@ fn activity_is_atomic_with_status_and_scopes_clear_done_without_reinterpreting_l
     assert_eq!(event["params"]["data"]["activity"], done["activity"]);
     s.json(&["label", &t, "hc.activity_session=ordinary"]);
     assert_eq!(get(&s, &t)["activity"], done["activity"], "labels remain uninterpreted");
-    touch(&s, "e");
+    for (gate, state) in [("e", "done"), ("alias_done", "idle")] {
+        touch(&s, gate);
+        let alias = word(&s, &t, state);
+        assert_eq!(alias["activity"], done["activity"], "raw alias retains complete chronology");
+        let event = next_event(&mut events, |m| {
+            m["params"]["type"] == "status" && m["params"]["data"]["status"]["state"] == state
+        });
+        assert_eq!(event["params"]["data"]["status"]["state"], state);
+        assert_eq!(event["params"]["data"]["activity"], done["activity"]);
+    }
+    touch(&s, "alias_idle");
     wait_until("new app", || get(&s, &t)["status"]["app"] == "agent-b");
     let replaced = get(&s, &t);
     assert!(replaced["activity"]["scope"].as_u64() > done["activity"]["scope"].as_u64());
@@ -80,4 +95,30 @@ fn a_genuinely_working_record_completes_after_restart_with_a_new_epoch() {
     let done = word(&s, &t, "idle");
     assert!(done["activity"]["records"][""]["completion_ordinal"].as_u64().is_some());
     assert!(done["activity"]["revision"].as_u64() > working["activity"]["revision"].as_u64());
+}
+
+#[test]
+fn named_readiness_aliases_publish_raw_status_with_unchanged_activity() {
+    let s = session();
+    s.json(&["server", "start"]);
+    let mut events = s.connect();
+    events.call(1, "events.subscribe", json!({}));
+    let body = "r id=build/test:state=working:app=fixture; w a; r id=build/test:state=done:app=fixture; w b; r id=build/test:state=idle:app=fixture; w c; r id=build/test:state=done:app=fixture; w d";
+    let t = run(&s, &["--cwd", s.root.to_str().unwrap(), "sh", "-c", &script(&s, body)]);
+    record_word(&s, &t, "build/test", "working");
+    touch(&s, "a");
+    let done = record_word(&s, &t, "build/test", "done");
+    assert!(done["activity"]["records"]["build/test"]["completion_ordinal"].as_u64().is_some());
+    for (gate, state) in [("b", "idle"), ("c", "done")] {
+        touch(&s, gate);
+        let alias = record_word(&s, &t, "build/test", state);
+        assert_eq!(alias["activity"], done["activity"]);
+        let event = next_event(&mut events, |m| {
+            m["params"]["type"] == "status" && m["params"]["data"]["records"]["build/test"]["state"] == state
+        });
+        assert_eq!(event["params"]["data"]["activity"], done["activity"]);
+    }
+    touch(&s, "d");
+    wait_until("finished", || get(&s, &t)["state"] == "finished");
+    assert!(get(&s, &t)["activity"]["records"]["build/test"]["completion_ordinal"].is_null());
 }

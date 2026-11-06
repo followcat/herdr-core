@@ -11,9 +11,14 @@ complete revised object; named clocks disappear with their records. `turn` remai
 ```
 
 The root key is `""`, retained even when status is null. Ordinals come from one checked counter
-per origin registry, allocated under the runtime lock in root/lexical record order. A new word
-gets a state ordinal; completion uses that same ordinal. Metadata changes (title, kind, message,
-progress, source) and repeated words do not advance it. Named removals and scope resets advance
+per origin registry, allocated under the runtime lock in root/lexical record order. A new effective
+word gets a state ordinal; completion uses that same ordinal. Adjacent `idle`/`done` spellings
+are one readiness state: within the same record/scope/incarnation they retain the exact state
+and completion ordinals (including null) and activity revision. Only the remembered raw word
+changes; acquisition/work guards stay unchanged. The raw status still updates and publishes
+with the complete unchanged Activity. App/foreground replacement and reset checks take
+precedence; readiness aliases cannot revive a withdrawn or cleared marker.
+Metadata changes (title, kind, message, progress, source) and repeated words do not advance it. Named removals and scope resets advance
 revision even though no new word exists. This order is independent of wall time, event seq,
 turns, parent `news`/`seen`, and relay arrival order. Relays preserve origin fields verbatim and
 strip unsupported activity on old paths. Labels, including `hc.activity_session`, remain ordinary
@@ -22,8 +27,8 @@ uninterpreted strings.
 Each record starts acquiring with no observed work. Initial idle/done or startup blocked →
 idle/done is readiness. Fresh working → idle/done completes. Working → blocked → idle/done also
 completes; working → error/unknown → idle/done does not. After acquisition, blocked → idle/done
-also completes. Repeated endpoints do not complete again. Clear, withdrawal, eviction, exit/loss
-and replacement only clear markers. The complete transition table is in `src/activity.rs`.
+also completes. Repeated or aliased readiness endpoints do not complete again. Clear, withdrawal,
+eviction, exit/loss and replacement only clear markers. The complete transition table is in `src/activity.rs`.
 
 Private acquisition/work guards and confirmed foreground owner stamps persist with records.
 Recovery replay uses durable guards but cannot seed work from a repeated working word. A fresh

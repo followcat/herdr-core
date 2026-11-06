@@ -32,6 +32,14 @@ fn acquisition_and_completion_follow_the_full_transition_table() {
     for (words, completes) in [
         (vec!["idle"], false),
         (vec!["done"], false),
+        (vec!["idle", "done", "idle"], false),
+        (vec!["done", "idle", "done"], false),
+        (vec!["idle", "working", "done", "idle"], true),
+        (vec!["done", "working", "idle", "done"], true),
+        (vec!["blocked", "idle", "done"], false),
+        (vec!["working", "blocked", "done", "idle"], true),
+        (vec!["working", "error", "idle", "done"], false),
+        (vec!["working", "unknown", "done", "idle"], false),
         (vec!["blocked", "idle"], false),
         (vec!["blocked", "done"], false),
         (vec!["working", "idle"], true),
@@ -43,15 +51,94 @@ fn acquisition_and_completion_follow_the_full_transition_table() {
         (vec!["idle", "blocked", "idle"], true),
         (vec!["idle", "working", "clear", "idle"], false),
     ] {
+        for id in ["", "build/test"] {
+            let (mut t, mut counter) = (terminal(), 0);
+            for word in &words {
+                report(&mut t, &mut counter, id, word);
+            }
+            let clock = &t.activity.as_ref().unwrap().records[id];
+            assert_eq!(clock.completion_ordinal.is_some(), completes, "{id}: {words:?}");
+            if completes {
+                assert_eq!(clock.completion_ordinal, clock.state_ordinal);
+            }
+        }
+    }
+}
+
+// Only the remembered raw word may change on a readiness alias.
+fn expect_alias(t: &mut Terminal, counter: &mut u64, id: &str, word: &str, evidence: Evidence<'_>) {
+    let before = t.activity.clone().unwrap();
+    let count = *counter;
+    let mut guards = t.activity_guard.clone();
+    guards.records.get_mut(id).unwrap().word = Some(word.into());
+    let status = if id.is_empty() { t.status.as_mut() } else { t.records.get_mut(id) }.unwrap();
+    status.state = word.into();
+    assert!(!observe(t, counter, &before.core_id, &before.epoch, evidence), "{id}: {word}");
+    assert_eq!(*counter, count);
+    assert_eq!(t.activity.as_ref(), Some(&before));
+    assert_eq!(t.activity_guard, guards);
+}
+
+#[test]
+fn readiness_aliases_preserve_exact_clocks_and_guards_until_new_work() {
+    for id in ["", "build/test"] {
+        for words in [
+            vec!["idle"],
+            vec!["done"],
+            vec!["blocked", "idle"],
+            vec!["working", "idle"],
+            vec!["idle", "working", "blocked", "done"],
+            vec!["working", "error", "idle"],
+            vec!["working", "unknown", "done"],
+        ] {
+            let (mut t, mut counter) = (terminal(), 0);
+            for word in &words {
+                report(&mut t, &mut counter, id, word);
+            }
+            let last = *words.last().unwrap();
+            let other = if last == "idle" { "done" } else { "idle" };
+            // A viewer's local seen token cannot be advanced by an alias.
+            let seen = t.activity.as_ref().unwrap().records[id].completion_ordinal;
+            for word in [other, last, other] {
+                expect_alias(&mut t, &mut counter, id, word, Evidence::Fresh(id));
+                assert_eq!(t.activity.as_ref().unwrap().records[id].completion_ordinal, seen);
+            }
+            let before = counter;
+            report(&mut t, &mut counter, id, "working");
+            report(&mut t, &mut counter, id, "idle");
+            let a = t.activity.as_ref().unwrap();
+            assert_eq!(counter, before + 2);
+            assert_eq!(a.revision, counter);
+            assert_eq!(a.records[id], Clock { state_ordinal: Some(counter), completion_ordinal: Some(counter) });
+            assert!(a.records[id].completion_ordinal > seen);
+            prepare(&mut t, "host-a", "epoch-b", true);
+            expect_alias(&mut t, &mut counter, id, "done", Evidence::Replay);
+        }
+    }
+}
+
+#[test]
+fn alias_after_clear_recreation_and_scope_reset_cannot_revive_a_marker() {
+    for id in ["", "build/test"] {
         let (mut t, mut counter) = (terminal(), 0);
-        for word in &words {
-            report(&mut t, &mut counter, "", word);
-        }
-        let clock = &t.activity.as_ref().unwrap().records[""];
-        assert_eq!(clock.completion_ordinal.is_some(), completes, "{words:?}");
-        if completes {
-            assert_eq!(clock.completion_ordinal, clock.state_ordinal);
-        }
+        report(&mut t, &mut counter, id, "working");
+        report(&mut t, &mut counter, id, "done");
+        assert!(t.activity.as_ref().unwrap().records[id].completion_ordinal.is_some());
+        report(&mut t, &mut counter, id, "clear");
+        assert!(t.activity.as_ref().unwrap().records.get(id).is_none_or(|c| c.completion_ordinal.is_none()));
+        report(&mut t, &mut counter, id, "idle");
+        assert!(t.activity.as_ref().unwrap().records[id].completion_ordinal.is_none());
+        expect_alias(&mut t, &mut counter, id, "done", Evidence::Fresh(id));
+        report(&mut t, &mut counter, id, "working");
+        report(&mut t, &mut counter, id, "idle");
+        assert!(t.activity.as_ref().unwrap().records[id].completion_ordinal.is_some());
+        let scope = t.activity.as_ref().unwrap().scope;
+        assert!(reset(&mut t, &mut counter, "host-a", "epoch-a"));
+        assert_eq!(t.activity.as_ref().unwrap().scope, scope + 1);
+        assert!(t.activity.as_ref().unwrap().records[id].completion_ordinal.is_none());
+        assert!(t.activity_guard.records[id].acquiring);
+        assert!(!t.activity_guard.records[id].work);
+        expect_alias(&mut t, &mut counter, id, "done", Evidence::Fresh(id));
     }
 }
 
@@ -75,6 +162,12 @@ fn metadata_repetition_named_subtree_removal_and_clocks_ignore_wall_time_and_tur
     assert!(!t.activity.as_ref().unwrap().records.contains_key("build/test"));
     assert_eq!(t.activity.as_ref().unwrap().revision, counter);
     assert_eq!(t.turn, 1, "existing accounting is unchanged");
+    t.status.as_mut().unwrap().source = Some("screen".into());
+    assert!(crate::status::withdraw_inferred(&mut t).status);
+    observe(&mut t, &mut counter, "host-a", "epoch-a", Evidence::Replay);
+    assert!(t.activity.as_ref().unwrap().records[""].completion_ordinal.is_none());
+    report(&mut t, &mut counter, "", "idle");
+    expect_alias(&mut t, &mut counter, "", "done", Evidence::Fresh(""));
 }
 
 #[test]
@@ -118,29 +211,35 @@ fn durable_guards_distinguish_real_work_from_unknown_prehistory_and_replay() {
 }
 
 #[test]
-fn app_replacement_resets_completion_even_with_the_same_status_word() {
-    let (mut t, mut counter) = (terminal(), 0);
-    t.status = Some(crate::status::Status {
-        state: "working".into(),
-        app: "agent-a".into(),
-        kind: None,
-        progress: None,
-        title: String::new(),
-        msg: String::new(),
-        source: None,
-    });
-    observe(&mut t, &mut counter, "host-a", "epoch-a", Evidence::Fresh(""));
-    report(&mut t, &mut counter, "", "idle");
-    // report() omitted app: unknown is not proof of a different app.
-    assert!(t.activity.as_ref().unwrap().records[""].completion_ordinal.is_some());
-    let scope = t.activity.as_ref().unwrap().scope;
-    t.status.as_mut().unwrap().app = "agent-b".into();
-    assert!(observe(&mut t, &mut counter, "host-a", "epoch-a", Evidence::Fresh("")));
-    assert!(t.activity.as_ref().unwrap().scope > scope);
-    assert!(t.activity.as_ref().unwrap().records[""].completion_ordinal.is_none());
-    assert!(
-        !serde_json::to_value(crate::terminals::Public(t)).unwrap().as_object().unwrap().contains_key("activity_guard")
-    );
+fn app_replacement_resets_completion_before_repeated_or_aliased_readiness() {
+    for id in ["", "build/test"] {
+        let (mut t, mut counter) = (terminal(), 0);
+        report(&mut t, &mut counter, id, "working");
+        let status = if id.is_empty() { t.status.as_mut() } else { t.records.get_mut(id) }.unwrap();
+        status.app = "agent-a".into();
+        observe(&mut t, &mut counter, "host-a", "epoch-a", Evidence::Fresh(id));
+        report(&mut t, &mut counter, id, "idle");
+        assert!(t.activity.as_ref().unwrap().records[id].completion_ordinal.is_some());
+        for word in ["idle", "done"] {
+            let (mut replaced, mut count) = (t.clone(), counter);
+            let status = if id.is_empty() { replaced.status.as_mut() } else { replaced.records.get_mut(id) }.unwrap();
+            status.app = "agent-b".into();
+            status.state = word.into();
+            let scope = replaced.activity.as_ref().unwrap().scope;
+            assert!(observe(&mut replaced, &mut count, "host-a", "epoch-a", Evidence::Fresh(id)));
+            assert!(replaced.activity.as_ref().unwrap().scope > scope);
+            assert!(replaced.activity.as_ref().unwrap().records[id].completion_ordinal.is_none());
+            let other = if word == "idle" { "done" } else { "idle" };
+            expect_alias(&mut replaced, &mut count, id, other, Evidence::Fresh(id));
+            assert!(
+                !serde_json::to_value(crate::terminals::Public(replaced))
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .contains_key("activity_guard")
+            );
+        }
+    }
 }
 
 #[test]
@@ -148,6 +247,12 @@ fn checked_exhaustion_drops_activity_instead_of_wrapping() {
     let (mut t, mut counter) = (terminal(), u64::MAX);
     report(&mut t, &mut counter, "", "working");
     assert!(t.activity.is_none());
+    assert_eq!(counter, u64::MAX);
+    let (mut t, mut counter) = (terminal(), 0);
+    report(&mut t, &mut counter, "", "idle");
+    counter = u64::MAX;
+    report(&mut t, &mut counter, "", "done");
+    assert!(t.activity.is_none(), "readiness aliases cannot bypass exhaustion");
     assert_eq!(counter, u64::MAX);
 }
 
@@ -170,6 +275,9 @@ fn maximum_legal_records_have_complete_clocks_and_eviction_removes_only_the_evic
     assert!(!a.records.contains_key(&evicted));
     assert_eq!(a.revision, counter);
     assert!(a.records.contains_key(""));
+    report(&mut t, &mut counter, &evicted, "idle");
+    assert!(t.activity.as_ref().unwrap().records[&evicted].completion_ordinal.is_none());
+    expect_alias(&mut t, &mut counter, &evicted, "done", Evidence::Fresh(&evicted));
     let mut reg = Registry { activity_ordinal: 0, ..Default::default() };
     reg.terminals.insert(1, t);
     restore(&mut reg, "host-a", "next-epoch");
@@ -261,6 +369,8 @@ fn foreground_scope_changes_publish_without_a_status_change_and_hydration_is_not
         assert_eq!(event["data"]["activity"], serde_json::to_value(st.reg.terminals[&id].activity.as_ref()).unwrap());
         assert_eq!(st.reg.terminals[&id].status.as_ref().unwrap().state, "idle");
         assert!(event["data"]["activity"]["records"][""]["completion_ordinal"].is_null());
+        let Registry { terminals, activity_ordinal, .. } = &mut st.reg;
+        expect_alias(terminals.get_mut(&id).unwrap(), activity_ordinal, "", "done", Evidence::Fresh(""));
     }
     drop(core);
     std::fs::remove_dir_all(root).unwrap();

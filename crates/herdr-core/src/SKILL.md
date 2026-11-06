@@ -99,8 +99,10 @@ DATA. Automatic terminal replies are a different input category.
 Fork full records expose `activity` when `record_activity` is supported: per-record state and
 completion ordinals, qualified by origin core, process epoch and scope. Status events carry it
 atomically; `activity` events publish scope/reset-only changes. Startup readiness does not mean
-completed work. This is separate from turns and parent notifications. Acknowledgement stays
-client-local; inventory does not prove output consumption. See `docs/record-activity.md`.
+completed work. Adjacent idle/done spellings retain existing state/completion ordinals and
+revision while the raw status still publishes. Withdrawal and scope/incarnation resets still
+clear markers; aliases cannot restore them. This is separate from turns and parent notifications.
+Acknowledgement stays client-local; inventory does not prove output consumption. See `docs/record-activity.md`.
 Leaving `blocked` also releases the draft, such as after a single-key
 approval. Other status changes do not consume human typing.
 After three minutes the draft hold
