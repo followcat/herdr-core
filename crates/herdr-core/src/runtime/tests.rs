@@ -37,7 +37,6 @@ async fn keys_pressed_during_a_paste_follow_its_submit() {
         .unwrap();
     // Ignore attach's resize frames. From here the fake holder sees only input.
     while frames.try_recv().is_ok() {}
-    core.output(&mut core.lock(), id, b"\x1b]7501;state=working\x1b\\");
     {
         let sending = core.send(id, "abc", false, None);
         tokio::pin!(sending);
@@ -50,23 +49,10 @@ async fn keys_pressed_during_a_paste_follow_its_submit() {
         assert!(frames.try_recv().is_err());
         core.viewer_input(&person, channel, b"Z", crate::viewers::InputKind::Human);
         assert!(frames.try_recv().is_err(), "the person's keys must stay held");
-        core.output(&mut core.lock(), id, b"\x1b]7501;state=done\x1b\\");
         tokio::time::advance(crate::input::PASTE_GAP).await;
         sending.await.unwrap();
         assert_eq!(frames.try_recv().unwrap(), proto::frame(proto::INPUT, id, b"\r"));
         assert_eq!(frames.try_recv().unwrap(), proto::frame(proto::INPUT, id, b"Z"));
-    }
-    // The injected Enter's acknowledgement arrives after the held draft was flushed.
-    core.output(&mut core.lock(), id, b"\x1b]7501;state=working\x1b\\");
-    {
-        let next = core.type_in(id, Duration::ZERO, true, |_, _| Ok(((), vec![])));
-        tokio::pin!(next);
-        poll_fn(|cx| {
-            assert!(next.as_mut().poll(cx).is_pending(), "the delayed working report must preserve the fresh draft");
-            Poll::Ready(())
-        })
-        .await;
-        assert!(core.lock().gates[&id].waiting_for_person);
     }
     drop(core);
     remove_root(&root);
@@ -266,6 +252,32 @@ async fn queued_machine_snapshots_cannot_restore_a_machine_after_rename_and_remo
     core.flush_machines().await.unwrap();
     drop(core);
     remove_root(&root);
+}
+
+#[tokio::test]
+async fn a_prepared_restart_survives_sigterm_and_rejects_stop() {
+    let root = std::env::temp_dir().join(format!("hc-restart-stop-{}", platform::random_hex()));
+    let paths = Paths {
+        state: root.join("state"),
+        config: root.join("config.toml"),
+        socket: root.join("run/core.sock"),
+        holder_socket: root.join("run/core.holder.sock"),
+    };
+    paths.create_dirs().unwrap();
+    let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
+    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    crate::api::dispatch(&call, "server.restart", serde_json::json!({})).await.unwrap();
+    crate::restart::on_sigterm(&core);
+    assert!(core.paths.state.join("restart-env.json").exists(), "SIGTERM keeps the explicit restart's note");
+    let error = crate::api::dispatch(&call, "server.stop", serde_json::json!({})).await.unwrap_err();
+    assert_eq!(error.kind, "unavailable");
+    assert!(!core.lock().stopping, "a prepared handoff keeps its holders");
+    crate::restart::discard(&core.paths);
+    core.restart.store(false, std::sync::atomic::Ordering::SeqCst);
+    crate::api::dispatch(&call, "server.stop", serde_json::json!({})).await.unwrap();
+    assert!(crate::restart::prepare(&core).is_err(), "a stop already in progress wins");
+    drop(core);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

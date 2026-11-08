@@ -27,6 +27,7 @@ pub mod releases;
 pub mod remote;
 #[doc(hidden)]
 pub mod repository;
+mod restart;
 pub mod rpc;
 pub mod runtime;
 pub mod screen_status;

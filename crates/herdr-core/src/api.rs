@@ -187,6 +187,10 @@ fn record(core: &Core, id: u32) -> Result<Terminal, RpcError> {
 }
 
 async fn server_stop(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
+    if core.restart.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(RpcError::new("unavailable", "the core is restarting", "run it again once it has restarted"));
+    }
+    crate::restart::discard(&core.paths);
     if let Err(e) = core.shutdown().await {
         eprintln!("core: shutdown registry flush failed: {}", e.message);
     }
@@ -196,9 +200,8 @@ async fn server_stop(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
 async fn server_restart(core: Ctx<'_>, _: Empty) -> Result<StopResult, RpcError> {
     // Under the state lock with the freeze, so no detection pass sees
     // "restarting" as a moment to still publish or keep collecting.
-    let mut st = core.lock();
-    core.restart.store(true, std::sync::atomic::Ordering::SeqCst);
-    st.freeze_screen_detection();
+    crate::restart::prepare_locked(core, |st| st.freeze_screen_detection())
+        .map_err(|e| RpcError::internal(e.to_string()))?;
     Ok(StopResult { stopped: true })
 }
 

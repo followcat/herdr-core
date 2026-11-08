@@ -57,8 +57,17 @@ impl Core {
             }
         }
         let mut st = self.lock();
-        let lost: Vec<u32> =
-            st.reg.terminals.values().filter(|t| t.is_live() && !adopted.contains(&t.id())).map(|t| t.id()).collect();
+        // Kept records already waiting for a shell retain why they stopped.
+        // A normal stop must not turn into crash cleanup on the next start.
+        // A replacement still claimed by a holder (holder set, no pid yet) is
+        // not waiting: if that holder is gone, it was lost like any other.
+        let lost: Vec<u32> = st
+            .reg
+            .terminals
+            .values()
+            .filter(|t| t.is_live() && !(t.program_lost() && t.holder.is_none()) && !adopted.contains(&t.id()))
+            .map(|t| t.id())
+            .collect();
         for id in lost {
             self.record_finish(&mut st, id, Exit { code: None, signal: None }, "stopped_by_restart");
         }

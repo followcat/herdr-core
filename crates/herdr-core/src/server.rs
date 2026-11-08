@@ -30,6 +30,8 @@ pub fn serve() -> io::Result<()> {
     // Where we listen, for clients whose env points elsewhere.
     lock.set_len(0)?;
     io::Write::write_all(&mut lock, paths.socket.as_os_str().as_encoded_bytes())?;
+    // The winning serve is still single-threaded, including when launched by an old holder.
+    unsafe { crate::restart::restore(&paths) };
     let info = load_identity(&paths.state, platform::machine_id())?;
     let socket = paths.socket.clone();
     let _shutdown_watch = platform::monitor_host_shutdown();
@@ -39,6 +41,7 @@ pub fn serve() -> io::Result<()> {
 
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
         let mut listener = AsyncListener::serve(bound)?;
+        crate::restart::discard(&core.paths);
         let kept = core.clone();
         tokio::spawn(async move {
             kept.clone().recover_kept(true).await;
@@ -64,14 +67,11 @@ pub fn serve() -> io::Result<()> {
                     tokio::spawn(connection(core.clone(), read, write));
                 }
                 _ = core.stop.notified() => break,
-                // SIGTERM is a planned restart: programs stay, screens are saved.
+                // Keep programs/screens, but only an explicit restart preserves environment.
                 _ = &mut term => {
                     // The flag and the detection freeze go down under the
                     // same lock, before the goodbye and handover awaits.
-                    let mut st = core.lock();
-                    core.restart.store(true, std::sync::atomic::Ordering::SeqCst);
-                    st.freeze_screen_detection();
-                    drop(st);
+                    crate::restart::on_sigterm_locked(&core, |st| st.freeze_screen_detection());
                     break;
                 }
             }

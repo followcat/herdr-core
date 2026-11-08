@@ -69,7 +69,7 @@ impl Gate {
     /// Viewer bytes: straight through, or held while an agent types.
     /// Only human input resets the quiet period.
     pub fn viewer(&mut self, bytes: &[u8], human: bool) -> Vec<u8> {
-        if human && !bytes.is_empty() {
+        if human {
             self.last_human = Some(Instant::now());
             self.draft.feed(bytes);
             if self.busy {
