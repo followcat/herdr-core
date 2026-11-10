@@ -243,6 +243,9 @@ pub(crate) fn child_env(base: BTreeMap<String, String>, extra: BTreeMap<String, 
     }
     env.entry("TERM".into()).or_insert_with(|| "xterm-256color".into());
     env.entry("COLORTERM".into()).or_insert_with(|| "truecolor".into());
+    // Herdr's pane contract: programs forward clipboard writes to the
+    // client terminal (OSC 52) only when it says a herdr client shows them.
+    env.entry("HERDR_ENV".into()).or_insert_with(|| "1".into());
     if env.get("TERM_PROGRAM").is_none_or(|p| p == "herdr") {
         env.insert("TERM_PROGRAM".into(), "ghostty".into());
         env.remove("TERM_PROGRAM_VERSION"); // the version belonged to whatever we replaced

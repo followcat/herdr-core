@@ -167,7 +167,13 @@ fn child_gets_core_env_caller_identity_cwd_and_its_own_address() {
     s.json(&["server", "start"]);
     let out = s
         .cmd()
-        .args(["run", "--bg", "sh", "-c", "echo id=$HC_TERMINAL_ID foo=$FOO tp=$TERM_PROGRAM pwd=$PWD; sleep 100"])
+        .args([
+            "run",
+            "--bg",
+            "sh",
+            "-c",
+            "echo id=$HC_TERMINAL_ID foo=$FOO tp=$TERM_PROGRAM pwd=$PWD he=$HERDR_ENV; sleep 100",
+        ])
         .env("FOO", "bar")
         .env("TERM_PROGRAM", "WezTerm")
         .current_dir("/var/tmp")
@@ -175,7 +181,7 @@ fn child_gets_core_env_caller_identity_cwd_and_its_own_address() {
         .output()
         .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    wait_text(&s, "t1", "id=t1 foo= tp=WezTerm pwd=/var/tmp");
+    wait_text(&s, "t1", "id=t1 foo= tp=WezTerm pwd=/var/tmp he=1");
 
     // Never herdr: a program started from inside Herdr sees plain ghostty.
     let out = s
