@@ -5,7 +5,7 @@
 use crate::foreground::Foreground;
 
 /// Every agent id the fork can detect (each keys a bundled manifest).
-pub const SUPPORTED: &[&str] = &["claude", "codex", "command-code", "devin", "opencode"];
+pub const SUPPORTED: &[&str] = &["claude", "codex", "command-code", "cursor", "devin", "opencode"];
 
 /// The foreground process's agent id, or `None` for shells and anything else.
 /// Only argv[0] and an interpreter's script/module position count — an agent
@@ -67,6 +67,7 @@ fn agent_from_basename(token: &str) -> Option<&'static str> {
         "claude" | "claude-code" => Some("claude"),
         "codex" => Some("codex"),
         "command-code" => Some("command-code"),
+        "cursor-agent" => Some("cursor"),
         "devin" | "devin-cli" => Some("devin"),
         "opencode" | "opencode2" | "open-code" | "opencode-ai" => Some("opencode"),
         _ => None,

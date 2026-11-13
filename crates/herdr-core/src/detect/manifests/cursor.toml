@@ -1,0 +1,104 @@
+# Screen rules for the Cursor CLI (`cursor-agent`, installed with Cursor).
+# Written for this fork from captured v2026.11.11 screens (cursor-*
+# fixtures); no herdr manifest exists. English UI only.
+#
+# Layout notes the rules rely on:
+# - The composer is a ▄/▀ box with a `→ ` input row; while a turn runs the
+#   row's right placeholder is `ctrl+c to stop`, and a `<braille> <verb>
+#   [N tokens]` spinner line sits above the box.
+# - Approval pickers replace the composer below a full-width `─` divider
+#   with a `→ ` option cursor; every variant ends in `Run Everything
+#   (shift+tab)` and names `allowlist` in one option.
+# - The resume/chat picker fills the screen under `─` header rules with an
+#   `All chats • <scope>` title and a `↑/↓ to navigate` footer.
+id = "cursor"
+version = "2026.12.13.1"
+min_engine_version = 8
+updated_at = "2026-12-13T00:00:00Z"
+aliases = ["cursor-agent", "cursor_agent"]
+
+# Workspace trust: a rounded ╭─╮ box mid-screen, no full-width `─` anchors.
+[[rules]]
+id = "workspace_trust"
+state = "blocked"
+kind = "permission"
+priority = 300
+region = "bottom_non_empty_lines(14)"
+visible_blocker = true
+contains = ["workspace trust required", "do you trust the contents of this directory?"]
+line_regex = ['\[a\]\s*Trust this workspace', '\[q\]\s*Quit']
+
+# Every approval picker shares the option cursor, the `Run Everything`
+# choice and `allowlist` wording; the question line varies by tool
+# (shell, file write/delete/read, MCP, web, sandbox escape, multi-approval
+# headers). Draft text cannot reach the region: pickers own the screen
+# below the last divider.
+[[rules]]
+id = "approval_picker"
+state = "blocked"
+kind = "permission"
+priority = 290
+region = "after_last_full_width_rule"
+visible_blocker = true
+contains = ["run everything", "(shift+tab)"]
+line_regex = ['^\s*→ ']
+any = [
+  { contains = ["allowlist"] },
+  { contains = ["approval"] },
+  { line_regex = ['(?i)\b(?:run|write|delete|read)\s+this\s+(?:command|file|mcp)', '(?i)allow this web', '(?i)proceed with this edit', '(?i)outside the sandbox'] },
+]
+
+# Terminal usage/spend limit: the agent prints the action line in the
+# transcript and returns the composer; the run cannot proceed.
+[[rules]]
+id = "sign_in_required"
+state = "blocked"
+kind = "auth"
+priority = 286
+region = "bottom_non_empty_lines(12)"
+visible_blocker = true
+line_regex = ['(?i)please sign in to continue']
+
+[[rules]]
+id = "usage_limit"
+state = "blocked"
+priority = 284
+region = "bottom_non_empty_lines(12)"
+visible_blocker = true
+line_regex = ['(?i)(?:usage_limit_exceeded|concurrent_limit_exceeded|upgrade your plan to continue|add a payment method to continue)']
+
+# `cursor-agent ls` / resume: a full-screen picker that wants a selection.
+[[rules]]
+id = "resume_picker"
+state = "blocked"
+kind = "question"
+priority = 280
+region = "whole_recent"
+visible_blocker = true
+contains = ["all chats", "to navigate", "enter to select", "esc to close"]
+
+# A live turn: `ctrl+c to stop` rides the input row, or a braille spinner
+# frame leads an `-ing` activity word above the box.
+[[rules]]
+id = "turn_running"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(10)"
+visible_working = true
+any = [
+  { contains = ["ctrl+c to stop"] },
+  { line_regex = ['(?i)[⠀-⣿]+\s*[a-z]+ing'] },
+]
+
+# The composer itself: ▄/▀ box with a `→ ` input row. No box glyphs means
+# a picker or the resume list owns the screen — never idle evidence.
+[[rules]]
+id = "composer"
+state = "idle"
+priority = 100
+region = "bottom_non_empty_lines(6)"
+visible_idle = true
+line_regex = ['^\s*▀{3,}', '^\s*→ ']
+not = [
+  { contains = ["ctrl+c to stop"] },
+]
