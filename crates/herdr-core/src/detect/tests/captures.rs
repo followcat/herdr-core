@@ -41,6 +41,13 @@ fn captured_screens_map_to_their_states() {
         ("cmd-draft.txt", "command-code", "", State::Idle, None),
         ("cmd-slash-menu.txt", "command-code", "", State::Idle, None),
         ("cmd-trust-dialog.txt", "command-code", "", State::Blocked, Some("permission")),
+        ("cmd-resume-picker.txt", "command-code", "", State::Blocked, Some("question")),
+        ("cursor-perm-shell.txt", "cursor", "", State::Blocked, Some("permission")),
+        ("cursor-write-file.txt", "cursor", "", State::Blocked, Some("permission")),
+        ("cursor-working.txt", "cursor", "", State::Working, None),
+        ("cursor-idle.txt", "cursor", "", State::Idle, None),
+        ("cursor-trust.txt", "cursor", "", State::Blocked, Some("permission")),
+        ("cursor-resume-picker.txt", "cursor", "", State::Blocked, Some("question")),
     ];
     for (file, agent, title, state, kind) in cases {
         let m = bundled(agent).unwrap();

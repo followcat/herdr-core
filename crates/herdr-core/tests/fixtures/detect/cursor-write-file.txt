@@ -1,0 +1,24 @@
+  Cursor Agent
+  v2026.11.11-043ef28
+
+  drafting the plan files now.
+
+  $ mkdir -p /home/user/work/scratchpad 1m 12s
+    Editing plan.md
+    Editing acceptance.md
+    Editing propose.md
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Approval 1 of 3
+ ...user/work/scratchpad/plan.md -1
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  # Plan — acme-shop v1
+ -  t1 `price-helpers`: In `shop.py`, add two helpers and unit tests in `tests/`:
+    1. `discounted_total(prices, pct)` — sum with a pct percent discount.
+ Write to this file?
+ in /home/user/work/scratchpad/plan.md
+  → Proceed (y)
+    Reject & propose changes (esc or n or p)
+    Add Write(/home/user/work/scratchpad/plan.md) to allowlist? (tab)
+    Run Everything (shift+tab)
+ ←/→ to switch approval
