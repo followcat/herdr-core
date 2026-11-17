@@ -82,6 +82,8 @@ async fn a_false_quiet_contract_stays_false_after_a_capable_reconnect() {
         host: "host-a".into(),
         hostname: None,
         version: "fixture".into(),
+        keeps_running_after_logout: None,
+        logout_linger_user: None,
     };
     let conn = Arc::new(Conn::default());
     conn.with(|out| out.open(7));
@@ -96,6 +98,7 @@ async fn a_false_quiet_contract_stays_false_after_a_capable_reconnect() {
             conn: conn.clone(),
             machine: machine.id.clone(),
             params: json!({"terminal":"t1","quiet_human_release":false}),
+            active_at: Instant::now(),
         },
     );
     let (frames, mut rx) = mpsc::unbounded_channel();

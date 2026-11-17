@@ -172,7 +172,7 @@ fn config(bytes: &[u8], home: &Path, files: &mut BTreeSet<PathBuf>) -> io::Resul
         return Err(io::Error::other("invalid or oversized config listing"));
     }
     let mut result = Vec::new();
-    for entry in fields.chunks_exact(2) {
+    for entry in fields.as_chunks::<2>().0 {
         let origin = entry[0].strip_prefix("file:").map(PathBuf::from);
         if let Some(path) = &origin {
             files.insert(path.clone());

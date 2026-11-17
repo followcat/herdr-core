@@ -44,6 +44,21 @@ pub fn about(pid: i32) -> Option<Foreground> {
     crate::platform::observe_foreground(pid).ok().flatten()
 }
 
+fn shell_root(root: &Foreground) -> bool {
+    // Command and script wrappers can share their foreground group with a live agent.
+    if root.argv.iter().skip(1).any(|arg| {
+        (!arg.starts_with('-') && !arg.starts_with('+'))
+            || matches!(arg.split('=').next(), Some("--command" | "--commands"))
+            || (arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('c'))
+    }) {
+        return false;
+    }
+    let program =
+        if root.name.is_empty() { root.argv.first().map(String::as_str).unwrap_or_default() } else { &root.name };
+    let name = program.rsplit('/').next().unwrap_or(program);
+    matches!(name, "sh" | "bash" | "zsh" | "fish" | "nu" | "dash" | "ksh" | "tcsh")
+}
+
 impl Core {
     /// Keeps every live terminal's `foreground` current, with an event on each change.
     pub async fn watch_foreground(self: Arc<Self>) {
@@ -78,6 +93,13 @@ impl Core {
                 let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live()) else {
                     continue;
                 };
+                let at_shell = crate::platform::foreground_tracks_jobs()
+                    && now.as_ref().is_some_and(|n| Some(n.pid as u32) == t.pid && shell_root(n));
+                let change = (at_shell && (t.status.is_some() || !t.records.is_empty())).then(|| {
+                    t.first_task_turn = None;
+                    crate::status::reset(t)
+                });
+                let foreground_changed = t.foreground != now;
                 if let Some(f) = &now {
                     t.last_cwd = Some(f.cwd.clone());
                 }
@@ -94,8 +116,37 @@ impl Core {
                     self.save_soon();
                     self.emit(&mut st, "foreground", id, serde_json::to_value(&now).unwrap_or_default());
                 }
+                if let Some(change) = change {
+                    self.save_soon();
+                    self.status_changed(&mut st, id, change);
+                }
+                if foreground_changed {
+                    self.save_soon();
+                }
                 self.activity_foreground(&mut st, id);
                 self.foreground_changed(&mut st, id, was.as_ref());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn root(shell: &str, argv: Vec<String>) -> Foreground {
+        Foreground { pid: 1, name: shell.into(), argv, cwd: "/".into(), started: None, agent: None }
+    }
+
+    #[test]
+    fn command_flags_keep_shell_roots_from_clearing_live_status() {
+        for shell in ["sh", "bash", "zsh", "fish", "nu", "dash", "ksh", "tcsh"] {
+            assert!(shell_root(&root(shell, vec![shell.into()])), "{shell}");
+            for arg in ["-i", "-li", "--login", "--no-config"] {
+                assert!(shell_root(&root(shell, vec![shell.into(), arg.into()])), "{shell} {arg}");
+            }
+            for arg in ["-c", "-cecho", "-ic echo", "--command", "--command=echo", "--commands", "--commands=echo"] {
+                assert!(!shell_root(&root(shell, vec![shell.into(), arg.into()])), "{shell} {arg}");
             }
         }
     }

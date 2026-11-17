@@ -80,6 +80,7 @@ impl Core {
             .filter(|t| matches!(t.reason.as_deref(), Some("holder_lost" | "stopped_by_restart")));
         self.sweep_in_background(leftovers.filter_map(|t| t.scope.clone()).collect());
         crate::exec::sweep_leftovers(&self.paths.state);
+        crate::put::sweep(&self.paths.state);
         self.prune(&mut st);
         self.save(&st);
         Ok(())
@@ -112,10 +113,26 @@ impl Core {
         drop(answered);
         let (bye, bye_rx) = mpsc::channel();
         let build = crate::client::build_id();
-        let current = welcome.build == build;
+        let current = platform::holder_current(
+            &welcome.build,
+            &build,
+            welcome.draining,
+            self.login_session,
+            welcome.login_session,
+        );
+        if welcome.build == build && self.login_session.is_some() && welcome.login_session.is_none() {
+            let _ = writeln!(
+                io::stderr(),
+                "core: holder {} login identity unavailable; retaining build eligibility",
+                welcome.pid
+            );
+        }
         if require_current && !current {
             io::Write::write_all(&mut stream, &proto::frame(proto::DRAIN, 0, &[]))?;
-            return Err(io::Error::other(format!("holder build {} differs from core build {build}", welcome.build)));
+            return Err(io::Error::other(format!(
+                "holder build {} / login {:?} is not current for core build {build} / login {:?} (draining={})",
+                welcome.build, welcome.login_session, self.login_session, welcome.draining
+            )));
         }
         let (writer, frames) = mpsc::channel::<Vec<u8>>();
         let mut socket = stream.try_clone()?;
@@ -129,7 +146,7 @@ impl Core {
         let link =
             Link { writer, pid: welcome.pid, instance: welcome.instance.clone(), current, bye, bye_rx: Some(bye_rx) };
         if !current {
-            // Another build: it keeps what it runs, takes nothing new, exits when empty.
+            // Another build/login or already draining: retain its programs, take no new work.
             link.send(&proto::frame(proto::DRAIN, 0, &[]));
         }
         let (adopted, nudge) = {
@@ -178,12 +195,27 @@ impl Core {
                 continue;
             }
             adopted.push(id);
+            if let Some(saved) = st.reg.drafts.remove(&id)
+                && handover
+            {
+                st.gates.insert(id, crate::input::Gate::restore(saved));
+            }
             st.reg.terminals.get_mut(&id).expect("ours").holder = Some(instance.to_string());
+            let replies = st.reg.replies.remove(&id).unwrap_or_default();
+            if handover {
+                let mut held = st.gates.entry(id).or_default().set_busy(false);
+                held.extend(replies);
+                if let Some(link) = st.link(id) {
+                    link.input(id, &held);
+                }
+            }
             let tail = tails.remove(&id).unwrap_or_default();
-            let saved = handover
-                .then(|| std::fs::read(self.snapshot_path(id)).ok())
-                .flatten()
-                .and_then(|bytes| Screen::restore(&bytes, self.history_bytes()));
+            let saved = if handover {
+                self.take_saved_screen(id)
+            } else {
+                let _ = std::fs::remove_file(self.snapshot_path(id));
+                None
+            };
             let exact = saved.is_some();
             let mut screen = saved.unwrap_or_else(|| Screen::new(h.cols, h.rows, self.history_bytes()));
             // Through a relay, like live output, so requests the screen doesn't keep are seen.
@@ -378,7 +410,7 @@ impl Core {
     }
 
     /// Handles the holder's frames until it says goodbye (true) or the link ends (false).
-    pub(super) fn holder_frames(&self, stream: &mut UnixStream, instance: &str) -> io::Result<bool> {
+    pub(super) fn holder_frames(self: &Arc<Self>, stream: &mut UnixStream, instance: &str) -> io::Result<bool> {
         while let Some((kind, id, payload)) = proto::read(stream)? {
             let mut st = self.lock();
             match kind {

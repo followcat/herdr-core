@@ -11,6 +11,31 @@ use common::*;
 use serde_json::Value;
 
 #[test]
+fn draft_handover_works_with_a_previous_core_in_both_directions() {
+    let Some(old) = std::env::var_os("HC_OLD_BIN").map(std::path::PathBuf::from) else {
+        eprintln!("skipped: no HC_OLD_BIN (run scripts/upgrade-test.sh <previous release>)");
+        return;
+    };
+    let mut s = Session::new();
+    s.env.extend([("HC_QUIET_MS".into(), "0".into()), ("HC_DRAFT_MS".into(), "60000".into())]);
+    install(&mut s, std::path::Path::new(BIN));
+    let t = start(&s, &["sh", "-c", BYTES]);
+    let mut person = common::framed::Viewer::attach(&s, &t, 80, 24, serde_json::json!({}));
+    person.typed(b"draft");
+    install(&mut s, &old);
+    s.json(&["server", "restart"]);
+    assert_eq!(get(&s, &t)["screen"], "exact");
+    s.json(&["send", &t, "x"]);
+    install(&mut s, std::path::Path::new(BIN));
+    s.json(&["server", "restart"]);
+    assert_eq!(get(&s, &t)["screen"], "exact");
+    let start = std::time::Instant::now();
+    s.json(&["send", &t, "y"]);
+    assert!(start.elapsed() < std::time::Duration::from_secs(2), "missing draft field must mean no draft");
+    assert!(text(&s, &t).contains("79"));
+}
+
+#[test]
 fn an_old_retained_holder_restores_the_new_cores_environment_after_raw_restart() {
     let Some(old) = std::env::var_os("HC_OLD_BIN").map(std::path::PathBuf::from) else {
         eprintln!("skipped: no HC_OLD_BIN (run scripts/upgrade-test.sh <previous release>)");
@@ -26,6 +51,12 @@ fn an_old_retained_holder_restores_the_new_cores_environment_after_raw_restart()
     s.env.retain(|(key, _)| key != "HC_RESTART_VALUE");
     s.env.push(("HC_RESTART_VALUE".into(), "saved-core".into()));
     let pid = s.json(&["server", "restart"])["pid"].clone();
+    // A previous release that saves its environment hands "old-holder" on;
+    // older ones give the new core the updater's "saved-core". Either way, the
+    // raw restart below must keep what this core has now.
+    let before = s.hc(&["exec", "printf '%s' \"$HC_RESTART_VALUE\""]);
+    assert!(before.status.success(), "{before:?}");
+    let expected = String::from_utf8_lossy(&before.stdout).into_owned();
     let reply = s.connect().call(1, "server.restart", serde_json::json!({}));
     assert!(reply.get("error").is_none(), "{reply}");
     // No autostarting CLI: only the released holder can launch the successor.
@@ -36,7 +67,7 @@ fn an_old_retained_holder_restores_the_new_cores_environment_after_raw_restart()
     });
     let out = s.hc(&["exec", "printf '%s' \"$HC_RESTART_VALUE\""]);
     assert!(out.status.success(), "{out:?}");
-    assert_eq!(String::from_utf8_lossy(&out.stdout), "saved-core");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), expected);
     s.json(&["send", &terminal, "after"]);
     says(&s, &terminal, "got-after");
 }

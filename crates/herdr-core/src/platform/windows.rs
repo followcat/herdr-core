@@ -298,6 +298,9 @@ impl Listener {
 pub type AsyncRead = tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeServer>;
 pub type AsyncWrite = tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeServer>;
 
+// Duplex named pipes cannot half-close: read EOF means the client disconnected.
+pub async fn reply_closed(_read: &AsyncRead) {}
+
 /// The core's pipe for clients.
 pub struct AsyncListener {
     name: PathBuf,
@@ -1037,9 +1040,10 @@ impl Pty {
         }
     }
 
-    /// No process groups on a pseudo console: the program it started.
+    /// No process groups on a pseudo console: a known shell's newest child,
+    /// else the terminal's first process.
     pub fn foreground(&self) -> i32 {
-        self.pid as i32
+        super::windows_foreground::in_front(self.job.as_raw_handle() as HANDLE, self.pid) as i32
     }
 
     /// Ctrl+C through the console for an interrupt; anything harder ends the

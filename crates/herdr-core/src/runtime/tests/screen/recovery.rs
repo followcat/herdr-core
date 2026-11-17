@@ -18,6 +18,8 @@ fn adopt_onto(core: &Arc<Core>, root: &std::path::Path, id: u32, previous: &str,
         instance: "fake".into(),
         pid: 0,
         build: crate::client::build_id(),
+        login_session: None,
+        draining: false,
         previous: previous.into(),
         terminals: vec![held],
     };
@@ -55,6 +57,8 @@ fn restart_on_fake_holder(
         instance: "fake".into(),
         pid: 0,
         build: crate::client::build_id(),
+        login_session: None,
+        draining: false,
         previous: previous.into(),
         terminals: vec![held],
     };

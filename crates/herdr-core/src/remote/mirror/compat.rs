@@ -26,6 +26,8 @@ fn fixture() -> (Arc<Core>, Machine, std::path::PathBuf) {
         host: "host-a".into(),
         hostname: None,
         version: "fixture".into(),
+        keeps_running_after_logout: None,
+        logout_linger_user: None,
     };
     core.lock().machines.push(machine.clone());
     (core, machine, root)

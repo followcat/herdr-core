@@ -8,6 +8,7 @@ pub(super) async fn hello(core: Ctx<'_>, p: HelloParams) -> Result<HelloResult, 
             format!("this core speaks generation {GENERATION}"),
         ));
     }
+    let (keeps_running_after_logout, logout_linger_user) = crate::platform::logout_linger();
     Ok(HelloResult {
         generation: GENERATION,
         version: version(),
@@ -15,10 +16,14 @@ pub(super) async fn hello(core: Ctx<'_>, p: HelloParams) -> Result<HelloResult, 
         framed: p.framed,
         methods: METHOD_NAMES.iter().map(|m| m.to_string()).collect(),
         features: FEATURES.iter().map(|f| f.to_string()).collect(),
+        login_session: core.login_session,
+        keeps_running_after_logout,
+        logout_linger_user,
     })
 }
 
 pub(super) async fn server_status(core: Ctx<'_>, _: Empty) -> Result<StatusResult, RpcError> {
+    let (keeps_running_after_logout, logout_linger_user) = crate::platform::logout_linger();
     let identity = core.info.observed();
     let st = core.lock();
     let live = st.reg.terminals.values().filter(|t| t.is_live()).count();
@@ -47,5 +52,7 @@ pub(super) async fn server_status(core: Ctx<'_>, _: Empty) -> Result<StatusResul
         live,
         finished: st.reg.terminals.len() - live,
         installed_by: crate::client::installed_by().map(String::from),
+        keeps_running_after_logout,
+        logout_linger_user,
     })
 }

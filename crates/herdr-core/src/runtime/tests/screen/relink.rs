@@ -11,6 +11,8 @@ fn detaching_holder(returns: bool) -> (Arc<Core>, PathBuf, u32, mpsc::Sender<()>
         instance: "fake".into(),
         pid: 0,
         build: crate::client::build_id(),
+        login_session: None,
+        draining: false,
         previous: "crash".into(),
         terminals: vec![proto::HeldTerminal { id, pid: 4321, cols: 80, rows: 24, exit: None }],
     };

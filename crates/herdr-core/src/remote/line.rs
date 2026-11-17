@@ -8,11 +8,20 @@ impl Line {
         Arc::new(Line {
             features: features.filter_map(|f| f.as_str().map(String::from)).collect(),
             frames,
+            closed: AtomicBool::new(false),
             pending: Mutex::default(),
             streams: Mutex::default(),
             next: AtomicU64::new(2),
             mirror: Mutex::default(),
+            bulk: Default::default(),
+            retired: Default::default(),
         })
+    }
+
+    pub(super) fn close(&self) {
+        let mut pending = lock(&self.pending);
+        self.closed.store(true, Ordering::Relaxed);
+        pending.clear();
     }
 
     /// A reply to one of our calls: to whoever waits for it.
@@ -75,23 +84,37 @@ impl Line {
             )));
         }
         let (tx, rx) = oneshot::channel();
-        lock(&self.pending).insert(id, (tx, sink));
-        let _ = self.frames.send(wire::encode(0, wire::DATA, req.as_bytes()));
-        let _asked = Asked { line: self, id };
-        let Ok(reply) = tokio::time::timeout(deadline, rx).await else {
-            return Err(RpcError::new(
-                "unavailable",
-                format!("{machine} didn't answer within {} s", deadline.as_secs()),
-                "it may be busy or stuck; hc machine ls shows its line",
-            ));
-        };
-        let reply = reply.map_err(|_| {
+        let lost = || {
             RpcError::new(
                 "unavailable",
                 format!("lost the line to {machine} during the call"),
                 "it may have happened there; check, then retry",
             )
-        })?;
+        };
+        {
+            let mut pending = lock(&self.pending);
+            if self.closed.load(Ordering::Relaxed) {
+                return Err(lost());
+            }
+            pending.insert(id, (tx, sink));
+        }
+        let _asked = Asked { line: self, id };
+        self.frames.send(wire::encode(0, wire::DATA, req.as_bytes())).map_err(|_| lost())?;
+        let reply = tokio::select! {
+            reply = tokio::time::timeout(deadline, rx) => reply.map_err(|_| {
+                RpcError::new(
+                    "unavailable",
+                    format!("{machine} didn't answer within {} s", deadline.as_secs()),
+                    if method == "terminal.send" {
+                        "it may still have been typed; check with hc read before retrying"
+                    } else {
+                        "it may be busy or stuck; hc machine ls shows its line"
+                    },
+                )
+            })?,
+            err = crate::server::send_cancelled(), if method == "terminal.send" => return Err(err),
+        };
+        let reply = reply.map_err(|_| lost())?;
         match reply.get("error") {
             Some(e) => Err(RpcError::from_json(e)),
             None => Ok(reply["result"].clone()),

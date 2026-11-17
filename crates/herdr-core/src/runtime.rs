@@ -11,7 +11,7 @@ use crate::terminals::Registry;
 use crate::viewers::Viewer;
 use ghostty_vt::Terminal as Screen;
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, mpsc};
 use std::time::{Duration, Instant, SystemTime};
@@ -36,6 +36,7 @@ pub(crate) struct TestObservations {
 pub struct Core {
     pub(crate) activity_epoch: String,
     pub info: CoreInfo,
+    pub login_session: Option<platform::LoginSession>,
     pub started: Instant,
     pub stop: Notify,
     /// Set by `server.restart`: on stop, hand over instead of ending programs.
@@ -56,6 +57,7 @@ pub struct Core {
     /// The registry changed in a way a crash may lose: `save_soon` writes it shortly.
     dirty: std::sync::atomic::AtomicBool,
     save_due: Notify,
+    pub(crate) image_due: Notify,
     registry_writer: StateWriter,
     machines_writer: StateWriter,
 }
@@ -67,10 +69,13 @@ pub struct State {
     pub docs: std::collections::BTreeMap<String, crate::api::DocGetResult>,
     pub screens: HashMap<u32, Screen>,
     pub relays: HashMap<u32, Relay>,
+    /// One deadline per terminal; image streams replace it instead of spawning timers.
+    pub image_deadlines: HashMap<u32, (u64, tokio::time::Instant)>,
     pub viewers: HashMap<u32, Vec<Viewer>>,
     pub events: crate::events::Events,
     pub gates: HashMap<u32, crate::input::Gate>,
-    pub queues: HashMap<u32, Arc<crate::input::Queue>>,
+    pub queues: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
+    pub sends: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub foreground: HashMap<u32, Vec<oneshot::Sender<i32>>>,
     /// Waits matching output: they get every byte viewers get.
     pub output_watch: HashMap<u32, Vec<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
@@ -116,6 +121,8 @@ pub struct State {
     pub peer_lines: HashMap<String, (usize, Arc<crate::remote::Line>)>,
     /// Notes from other machines for parents here, until typed.
     pub afar_notes: HashMap<u32, Vec<String>>,
+    /// Provisional callback grants: (parent, machine) -> (runs pending, keep after failure).
+    pub afar_runs: HashMap<(u32, String), (usize, bool)>,
     /// What a machine must hear once its line is back (a parent here finished).
     pub machine_outbox: HashMap<String, Vec<serde_json::Value>>,
     /// When each holder was last reconnected to after our reading of it failed.
@@ -125,6 +132,8 @@ pub struct State {
     /// Each connected machine's terminals as seen from here, kept current by
     /// its events: machine id -> address (`rohan/t7`) -> record.
     pub mirrors: HashMap<String, std::collections::BTreeMap<String, serde_json::Value>>,
+    /// Puts arriving in pieces from other cores, by transfer handle.
+    pub puts: HashMap<String, crate::put::Transfer>,
 }
 
 pub struct Link {
@@ -256,6 +265,7 @@ impl Core {
         let core = Arc::new(Core {
             activity_epoch,
             info,
+            login_session: platform::login_session(),
             started: Instant::now(),
             stop: Notify::new(),
             restart: Default::default(),
@@ -272,6 +282,7 @@ impl Core {
             holder_start: Default::default(),
             dirty: Default::default(),
             save_due: Notify::new(),
+            image_due: Notify::new(),
         });
         core.attach_all()?;
         Ok(core)
@@ -295,8 +306,16 @@ impl Core {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    fn snapshot_path(&self, id: u32) -> PathBuf {
+    pub(crate) fn snapshot_path(&self, id: u32) -> PathBuf {
         self.paths.state.join("screens").join(format!("{}.snap", crate::terminals::address(id)))
+    }
+
+    /// A live terminal's saved screen, read once: a later loss must not bring back an older one.
+    pub(crate) fn take_saved_screen(&self, id: u32) -> Option<Screen> {
+        let path = self.snapshot_path(id);
+        let bytes = std::fs::read(&path).ok();
+        let _ = std::fs::remove_file(&path);
+        Screen::restore(&bytes?, self.history_bytes())
     }
 
     pub fn save(&self, st: &State) {
@@ -359,7 +378,6 @@ impl Core {
         }
     }
 
-    /// A holder of our build for new terminals, started if there is none.
     /// A program ended: record it, keep its final screen on disk, let the holder forget it.
     pub fn finish(&self, st: &mut State, id: u32, exit: Exit) {
         let reason = finish_reason(st.killing.contains(&id), st.stopping, platform::host_shutdown_in_progress());
@@ -418,7 +436,7 @@ impl Core {
         if let Some(snapshot) = st.screens.remove(&id).and_then(|s| s.snapshot())
             && let Err(e) = write_atomic(&self.snapshot_path(id), &snapshot)
         {
-            eprintln!("core: cannot save screen of {}: {e}", crate::terminals::address(id));
+            let _ = writeln!(io::stderr(), "core: cannot save screen of {}: {e}", crate::terminals::address(id));
         }
         // `--rm`: gone now, unless its parent is waiting for the exit code.
         let rm = st.reg.terminals.get(&id).is_some_and(|t| {
@@ -458,6 +476,7 @@ impl Core {
         st.repositories.remove(id);
         self.emit_from(st, "removed", id, serde_json::json!({}), Some(&was));
         let _ = std::fs::remove_file(self.snapshot_path(id));
+        crate::api::forget_puts(st, |t| t.terminal == id);
         let _ = std::fs::remove_dir_all(crate::put::dir(&self.paths.state, id));
         self.save(st);
     }
@@ -595,6 +614,22 @@ impl Core {
         {
             let mut st = self.lock();
             st.holders.clear();
+            // Goodbye has consumed all output before the holder's cutoff. Carry
+            // replies taken out of the screen, including those from that last output.
+            st.reg.replies = st
+                .relays
+                .iter_mut()
+                .filter_map(|(id, relay)| {
+                    let replies = relay.end_wait();
+                    (!replies.is_empty()).then_some((*id, replies))
+                })
+                .collect();
+            st.reg.drafts = st
+                .gates
+                .iter()
+                .filter(|(id, _)| st.reg.terminals.get(*id).is_some_and(|t| t.is_live()))
+                .filter_map(|(id, gate)| Some((*id, gate.snapshot()?)))
+                .collect();
             let State { screens, relays, .. } = &mut *st;
             for (id, screen) in screens.iter_mut() {
                 if let Some(relay) = relays.get_mut(id) {
