@@ -149,7 +149,9 @@ A program that does not report status has none.
 
 > **followcat fork:** this branch adds a screen-detection fallback for a
 > fixed allowlist of agents that never speak 7501, marked `"source": "screen"`.
-> Native reports always win. See [docs/screen-status.md](docs/screen-status.md).
+> Native reports always win. See [docs/screen-status.md](docs/screen-status.md)
+> and the full list of fork features for clients in
+> [docs/fork-features.md](docs/fork-features.md).
 
 Use `hc get review` for a snapshot or `hc events` to follow changes.
 
