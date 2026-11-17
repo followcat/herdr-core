@@ -118,7 +118,15 @@ fn a_label_filtered_subscriber_hears_a_terminal_leave_its_filter() {
     let snapshot: serde_json::Value = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
     assert_eq!(snapshot["terminals"][0]["address"], t.as_str());
     s.json(&["label", &t, "team=blue"]);
-    let e: serde_json::Value = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+    // The fork also publishes `repository`/`activity` events for a terminal:
+    // this subscriber cares about the label change, so skip other kinds.
+    let mut next = |want: &str| loop {
+        let line: serde_json::Value = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+        if line["params"]["type"] == want {
+            break line;
+        }
+    };
+    let e = next("labels");
     assert_eq!(
         (e["params"]["type"].as_str(), e["params"]["data"]["labels"]["team"].as_str()),
         (Some("labels"), Some("blue")),
@@ -128,7 +136,12 @@ fn a_label_filtered_subscriber_hears_a_terminal_leave_its_filter() {
     // Entering the filter: the event brings the whole record, so the view can add it.
     let u = s.json(&["run", "--bg", "--name", "newcomer", "sleep", "100"])["address"].as_str().unwrap().to_string();
     s.json(&["label", &u, "team=red"]);
-    let e: serde_json::Value = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+    let e = loop {
+        let e = next("labels");
+        if e["params"]["terminal"] == u.as_str() {
+            break e;
+        }
+    };
     events.kill().unwrap();
     events.wait().unwrap();
     assert_eq!(e["params"]["terminal"], u.as_str());
