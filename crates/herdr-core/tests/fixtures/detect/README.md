@@ -16,6 +16,7 @@ Antoine Floury); its license and a scope note live in
 | `devin-welcome.txt` | `tests/captures/devin-idle.ansi` | ANSI escape sequences removed, CRLF normalized, environment and path text neutralized |
 | `devin-draft-box.txt` | `tests/captures/devin-draft.ansi` | ANSI escape sequences removed, CRLF normalized, environment and path text neutralized |
 | `opencode-permission-{edit,narrow,shell}.txt` | same names under `tests/captures/` | byte-identical |
+| `cline-{idle,working,approval}.txt` | same names under `tests/fixtures/core-screens/` | byte-identical |
 
 Neutralization on the two `.ansi` conversions replaced real user/host names,
 env values and absolute paths with neutral stand-ins; everything else is the

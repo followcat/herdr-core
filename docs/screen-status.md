@@ -89,10 +89,30 @@ state yet, so the rule is unproven (or absent) until a capture exists.
 | `codex` | `codex`; `@openai/codex` entrypoints | blocked (captured); **idle, working and real title transitions: needs capture** |
 | `opencode` | `opencode`, `open-code`, `opencode2`, `opencode-ai` | blocked (captured); **working and evidence-backed idle: needs capture** |
 | `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | working, tool/trust permissions, idle (captured) |
+| `cline` | `cline` (the npm shim), `.cline` (the package's own executable, also its `comm`); node entrypoints under `node_modules/cline` | working, permission and idle (captured); **a spinner-less think is unknown by design** |
 
 Anything else — shells, editors, one-off tools — is not inferred at all.
 A terminal whose foreground is a plain shell or an unrecognized program has
 no status, exactly as upstream.
+
+### Cline
+
+Cline's composer is `❯ Ask anything...` between two full-width rules, with a
+status footer under it (a context meter, then the workspace and
+`Auto-approve all …`). The three rules read three different regions, and
+nothing else on screen can stand in for them:
+
+- **working**: a braille spinner with its interrupt hint
+  (`⠏ Thinking... (esc to cancel)`) as the *last* content line above the
+  composer. Braille inside quoted code or tool output, and a scrollbar column
+  of `█`, sit further up and never count.
+- **blocked**: `[y] Approve` and `[n] Deny` in the dialog area under the last
+  rule, with no composer in that area — a box quoted above a live composer is
+  a transcript, not a question.
+- **idle**: the composer's own `❯ Ask anything...` placeholder, with neither a
+  spinner nor an unanswered `❯ <message>` as the newest line above it. Cline
+  can think for a minute with neither spinner nor hint on screen; that screen
+  stays `unknown`, because only positive evidence may publish a state.
 
 ## Configuration
 

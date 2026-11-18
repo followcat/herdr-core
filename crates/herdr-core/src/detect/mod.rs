@@ -119,6 +119,7 @@ pub fn detect_with_logical_screen(manifest: &Manifest, input: &Input<'_>, logica
 /// the file name under `<config dir>/detect/` for user overrides.
 pub const BUNDLED: &[(&str, &str)] = &[
     ("claude", include_str!("manifests/claude.toml")),
+    ("cline", include_str!("manifests/cline.toml")),
     ("codex", include_str!("manifests/codex.toml")),
     ("command-code", include_str!("manifests/command-code.toml")),
     ("devin", include_str!("manifests/devin.toml")),

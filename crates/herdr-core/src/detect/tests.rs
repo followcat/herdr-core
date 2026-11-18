@@ -504,6 +504,28 @@ fn command_code_identifies_only_its_package_entrypoints() {
     assert_eq!(identify(&fg("cmd", &["C:\\Tools\\cmd"])), None, "a cmd outside the package is not evidence");
 }
 
+/// Cline runs as `node …/bin/cline` (an npm shim into its package, with the
+/// launcher's comm) or as the package's own `.cline` executable. A file or
+/// folder that merely shares the name is a mention, not evidence.
+#[test]
+fn cline_is_identified_from_its_shim_or_package_executable() {
+    let cases: &[(&str, &[&str], Option<&str>)] = &[
+        ("MainThread", &["node", "/opt/homebrew/bin/cline", "-i", "--yolo"], Some("cline")),
+        ("node", &["node", "/usr/local/bin/cline"], Some("cline")),
+        ("node", &["node", "/usr/lib/node_modules/cline/bin/cline"], Some("cline")),
+        (".cline", &["/opt/homebrew/lib/node_modules/cline/bin/.cline", "-i"], Some("cline")),
+        ("cline", &["/opt/homebrew/bin/cline"], Some("cline")),
+        ("node", &["C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\cline\\bin\\cline"], Some("cline")),
+        ("vim", &["vim", "cline"], None),
+        ("ls", &["ls", "-la", "/home/user/cline"], None),
+        ("less", &["less", "cline-transcript.txt"], None),
+        ("python3", &["python3", "-m", "venv", "cline-env"], None),
+    ];
+    for (name, argv, want) in cases {
+        assert_eq!(identify(&fg(name, argv)), *want, "{name} {argv:?}");
+    }
+}
+
 // --- the manifest catalog ----------------------------------------------------
 
 fn overrides(tag: &str, entries: &[(&str, &str)]) -> std::path::PathBuf {

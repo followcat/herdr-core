@@ -1,0 +1,26 @@
+
+ ❯ Run the shell command: ls
+
+ ▶ Thinking: Just run ls.
+
+
+
+
+
+
+
+
+ Cline needs permission
+
+ Approve tool call?
+
+ run_commands
+
+   $ ls
+
+  [y] Approve   [n] Deny
+
+
+ ClinePass: Demo Model 1 (medium) ██████ (7,596)                                                                                                                         ○ Plan ● Act (Tab)
+ acme-shop
+ Auto-approve all disabled (Shift+Tab)

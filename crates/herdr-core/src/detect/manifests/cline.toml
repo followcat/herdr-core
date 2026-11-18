@@ -1,0 +1,61 @@
+# Screen rules for the Cline CLI (`cline -i`, tested with 3.0.74).
+# The fork's own rules: there is no herdr upstream for Cline, so nothing here
+# is adapted from it. Captures are in tests/fixtures/detect/cline-*.txt.
+#
+# The composer is `❯ Ask anything...` between two full-width rules; the status
+# footer (a context meter, then the workspace and `Auto-approve all …`) sits
+# under it. A running turn shows a braille spinner above the composer; a tool
+# call awaiting permission replaces the composer with a box ending in
+# `[y] Approve   [n] Deny`.
+#
+# Only positive evidence publishes a state. Cline can think for a minute with
+# neither its spinner nor its interrupt hint on screen: that screen stays
+# unknown, never idle.
+id = "cline"
+version = "2026.11.18.1"
+min_engine_version = 4
+updated_at = "2026-11-18T00:00:00Z"
+aliases = ["cline-cli"]
+
+# The approval box: two literal-key answers on one row, in the dialog area
+# under the last rule, and no composer anywhere near it. A box quoted in a
+# reply or a tool result keeps the composer below it, which is the exclusion.
+[[rules]]
+id = "tool_approval"
+state = "blocked"
+kind = "permission"
+priority = 300
+region = "bottom_non_empty_lines(10)"
+visible_blocker = true
+all = [
+  { line_regex = ['^\s*\[y\]\s*Approve\b'] },
+  { line_regex = ['(?i)\[n\]\s*Deny\b'] },
+]
+not = [{ line_regex = ['^\s*❯\s+Ask anything'] }]
+
+# A braille spinner with its interrupt hint, only as the last content line
+# above the composer. Braille inside quoted code or tool output further up
+# never counts, and the hint keeps a transcript glyph from claiming a turn.
+[[rules]]
+id = "spinner_working"
+state = "working"
+priority = 200
+region = "last_non_empty_above_prompt_box"
+visible_working = true
+line_regex = ['^\s*[\x{2801}-\x{28FF}]\s+\S.*\(esc to cancel\)']
+
+# The live composer. Idle needs more than the field: a submitted message left
+# as the newest line above it means the turn has not answered yet (a spinner
+# can go missing while Cline thinks), and a spinner-like line of any kind is
+# never readiness.
+[[rules]]
+id = "live_prompt_field"
+state = "idle"
+priority = 100
+region = "prompt_box_body"
+visible_idle = true
+line_regex = ['^\s*❯\s+Ask anything']
+not = [
+  { region = "last_non_empty_above_prompt_box", line_regex = ['^\s*[\x{2801}-\x{28FF}]'] },
+  { region = "last_non_empty_above_prompt_box", line_regex = ['^\s*❯\s+\S'] },
+]

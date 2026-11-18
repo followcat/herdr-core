@@ -41,6 +41,9 @@ fn captured_screens_map_to_their_states() {
         ("cmd-draft.txt", "command-code", "", State::Idle, None),
         ("cmd-slash-menu.txt", "command-code", "", State::Idle, None),
         ("cmd-trust-dialog.txt", "command-code", "", State::Blocked, Some("permission")),
+        ("cline-idle.txt", "cline", "", State::Idle, None),
+        ("cline-working.txt", "cline", "", State::Working, None),
+        ("cline-approval.txt", "cline", "", State::Blocked, Some("permission")),
     ];
     for (file, agent, title, state, kind) in cases {
         let m = bundled(agent).unwrap();
@@ -284,4 +287,44 @@ fn cmd_retained_footer_above_a_finished_reply_is_idle() {
     let m = bundled("command-code").unwrap();
     let d = detect(&m, &input(&screen));
     assert_eq!((d.state, d.kind), (State::Idle, None), "retained footer (rule: {:?})", d.rule);
+}
+
+// --- Cline -----------------------------------------------------------------
+
+/// Mid-think with neither the spinner nor the hint on screen: the composer is
+/// unchanged, so the screen must stay unknown rather than claim readiness.
+#[test]
+fn cline_spinnerless_midthink_is_unknown() {
+    let working = fixture("cline-working.txt");
+    let screen: String =
+        working.lines().filter(|l| !l.trim_start().starts_with('⠏')).map(|l| format!("{l}\n")).collect();
+    assert!(screen.contains("❯ Ask anything..."), "the composer is still there");
+    assert!(!screen.contains("esc to cancel"));
+    let d = detect(&bundled("cline").unwrap(), &input(&screen));
+    assert_eq!(d.state, State::Unknown, "rule: {:?}", d.rule);
+}
+
+/// Braille in quoted output and a scrollbar column are not a spinner: the
+/// working rule reads only the last line above the composer. A braille line
+/// that *is* the newest row, without the interrupt hint, is no spinner — and
+/// no readiness either.
+#[test]
+fn cline_quoted_braille_and_scrollbars_are_not_a_spinner() {
+    let idle = fixture("cline-idle.txt");
+    let m = bundled("cline").unwrap();
+    let quoted = idle.replace("   $ ls -la\n", "   $ ls -la\n   ⠏ Thinking... (esc to cancel)   █\n   █\n   █\n");
+    assert!(quoted.contains("⠏ Thinking... (esc to cancel)"));
+    let d = detect(&m, &input(&quoted));
+    assert_eq!(
+        (d.state, d.rule.as_deref()),
+        (State::Idle, Some("live_prompt_field")),
+        "quoted braille is not a spinner"
+    );
+
+    let newest = idle.replace(
+        "   Result: the directory is empty. /home/user/acme-shop contains only the two implicit entries.\n",
+        "   Result: the directory is empty. /home/user/acme-shop contains only the two implicit entries.\n   ██████\n   ⠋ Thinking, no hint\n",
+    );
+    let d = detect(&m, &input(&newest));
+    assert_eq!(d.state, State::Unknown, "a bare braille row proves nothing (rule: {:?})", d.rule);
 }
