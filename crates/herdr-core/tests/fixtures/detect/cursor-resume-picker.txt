@@ -1,0 +1,28 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    All chats • This workspace                                                                                                                                                Last updated
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  → Fix the flaky test                                                                                                                                                    Yesterday 05:51 PM
+    Add a README                                                                                                                                                          Yesterday 03:32 PM
+    Rename the helper                                                                                                                                                     Yesterday 10:56 AM
+    Wire the retry loop                                                                                                                                                   Yesterday 08:50 AM
+    Document the adapter                                                                                                                                                    2 days ago
+    Neutralize the fixture                                                                                                                                                  2 days ago
+    Bump the manifest                                                                                                                                                       3 days ago
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                  1/26 • ↑/↓ to navigate • ←/→ to switch scope • Enter to select • Backspace to delete • Esc to close

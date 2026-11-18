@@ -6,6 +6,14 @@
 # are outside this inventory.
 # Known gap: arbitrary mod-provided status text is not recognized. A mod
 # rendering the same bytes as built-in UI is inherently indistinguishable.
+#
+# 2026-12-13 gap review against the S12a 1.88.4/1.88.5 measurement:
+# - trust dialog, tool permissions, working footers, composer: covered.
+# - `cmd -r`/`--sessions` resume picker: added as resume_picker (question).
+# - 429/rate-limit responses surface as the RetryMessage footer already in
+#   turn_footer; no terminal usage-limit screen exists in the 1.88.5 bundle.
+# - The update banner (`1.88.x → 1.88.y` available) is transcript text that
+#   never gates input: intentionally no rule.
 id = "command-code"
 version = "2026.11.05.17"
 min_engine_version = 8
@@ -108,6 +116,19 @@ not = [
     { regex = ['(?m)^ ?[·☆⌘◇○✧][ \t]*Switching(?:[ \t]+|\r?\n {2,3})to(?:[ \t]+|\r?\n {2,3})\S[^\r\n]*(?:\r?\n {2,3}\S[^\r\n]*)*(?:[ \t]+|\r?\n {2,3})in(?:[ \t]+|\r?\n {2,3})the(?:[ \t]+|\r?\n {2,3})cloud…(?:\r?\n {3}Large\s+repo:\s+it\s+is\s+cloned\s+once\s+per\s+session,\s+and\s+reopening\s+is\s+fast\.)?\s*\z'] },
   ] },
 ]
+# `cmd -r` / `--sessions` with no name: the Resume Session picker fills the
+# screen — title, Sort row, a `› Type to search sessions...` field and the
+# `enter resume` footer (cmd-resume-picker fixture). It wants a selection,
+# not an approval: question, not permission.
+[[rules]]
+id = "resume_picker"
+state = "blocked"
+kind = "question"
+priority = 280
+region = "after_last_full_width_rule"
+visible_blocker = true
+contains = ["resume session", "type to search sessions", "enter resume"]
+
 # The slash-command menu over the composer: "❯ /" plus " /cmd   hint" rows
 # (cmd-slash-menu fixture). Still idle: the agent waits for input.
 [[rules]]

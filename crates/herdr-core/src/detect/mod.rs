@@ -122,6 +122,7 @@ pub const BUNDLED: &[(&str, &str)] = &[
     ("cline", include_str!("manifests/cline.toml")),
     ("codex", include_str!("manifests/codex.toml")),
     ("command-code", include_str!("manifests/command-code.toml")),
+    ("cursor", include_str!("manifests/cursor.toml")),
     ("devin", include_str!("manifests/devin.toml")),
     ("opencode", include_str!("manifests/opencode.toml")),
 ];

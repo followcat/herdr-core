@@ -348,10 +348,14 @@ fn identifies_native_executables_paths_and_suffixes() {
         ("devin", &["devin"], Some("devin")),
         ("opencode", &["opencode"], Some("opencode")),
         ("claude-code", &["claude-code"], Some("claude")),
+        ("cursor-agent", &["cursor-agent"], Some("cursor")),
         ("devin-cli", &["devin-cli"], Some("devin")),
         ("opencode2", &["opencode2"], Some("opencode")),
         // Paths: the basename, not the folders, carries the name.
         ("node", &["/usr/local/bin/codex", "resume"], Some("codex")),
+        // cursor-agent's bash wrapper `exec -a`s its own path onto node,
+        // so argv0 — not `node` — is what identifies it.
+        ("node", &["/usr/local/bin/cursor-agent", "chat"], Some("cursor")),
         ("cmd", &["/home/user/.local/bin/opencode", "run"], Some("opencode")),
         // Windows-style suffixes and separators.
         ("claude.exe", &["claude.exe"], Some("claude")),

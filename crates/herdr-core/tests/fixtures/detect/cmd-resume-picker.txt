@@ -1,0 +1,12 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Resume Session
+Sort: Recent · Name: All · Branch: All
+
+› Type to search sessions...
+
+#     Modified    Git Branch            Messages    Summary
+
+1.    1h ago      -                     26          my-session
+
+enter resume · ctrl+s sort · ctrl+n named · ctrl+r rename · ctrl+d delete · ctrl+p path · ctrl+b branch · type to search
