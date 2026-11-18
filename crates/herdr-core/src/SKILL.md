@@ -86,6 +86,12 @@ full-screen app, then restore its view. While its status is `working`,
 `blocked` or `error`, history reads return only the screen immediately,
 marked incomplete with `why` set to that status; no scroll input is sent.
 
+Fork full records expose `ended_by` when `ended_by` is supported: the request (`terminal.kill`,
+`terminal.rm`), parent cascade (`die_with_parent`), `server_stop` or `host_shutdown` that ended it,
+with the caller, the client process and the terminal it ran in. It is absent when the program
+exited by itself. `hc ended [--since 1h] [--json]` prints the core's journal of ends and removals
+(`ended.jsonl` in its state directory), which outlives a terminal removed with `hc rm`.
+
 A send stays pending while the person has an unsent draft in that terminal.
 Enter, Ctrl+C or Ctrl+U releases it; Escape and backspace do not reliably
 mean clear, so they do not. Only human viewer input counts, not automatic

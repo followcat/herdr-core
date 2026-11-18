@@ -267,6 +267,73 @@
       "Empty": {
         "type": "object"
       },
+      "EndedBy": {
+        "description": "Why a terminal ended, when its own program did not simply exit.",
+        "properties": {
+          "by": {
+            "description": "The request that ended it (`terminal.kill`, `terminal.rm`), or what\nhappened instead: `die_with_parent`, `server_stop`, `host_shutdown`.",
+            "type": "string"
+          },
+          "caller": {
+            "description": "The caller the request carried, as it was named here (`t3`,\n`rohan/t3`). `ppid:<pid>` means the caller was not a terminal.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comm": {
+            "description": "That process's `comm` (`hc`, `herdr-core`, a simulator).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "core": {
+            "description": "The core the request came through, when it came from another machine.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent": {
+            "description": "`die_with_parent`: the parent that ended.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndedBy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That parent's own `ended_by`, when it had one."
+          },
+          "pid": {
+            "description": "The process that sent the request over this core's socket.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "terminal": {
+            "description": "The terminal whose program that process runs in, found by walking its\nparents up to a program this core started.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "by"
+        ],
+        "type": "object"
+      },
       "ExecResult": {
         "properties": {
           "code": {
@@ -1013,6 +1080,17 @@
             "default": false,
             "type": "boolean"
           },
+          "ended_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndedBy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who ended it: the request, parent cascade or core that did, rather than\nits own program exiting (fork). Absent for a program that exited itself."
+          },
           "exit_code": {
             "format": "int32",
             "type": [
@@ -1539,6 +1617,17 @@
           "die_with_parent": {
             "default": false,
             "type": "boolean"
+          },
+          "ended_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndedBy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who ended it: the request, parent cascade or core that did, rather than\nits own program exiting (fork). Absent for a program that exited itself."
           },
           "exit_code": {
             "format": "int32",

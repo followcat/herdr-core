@@ -42,6 +42,7 @@ No terminal
 
 More
   templates                   list templates
+  ended [--since 1h]          who ended or removed terminals (this core's journal)
   events                      follow changes live
   server start|stop|status|restart
                               stop parks kept terminals; next core start gives them shells
@@ -99,6 +100,19 @@ Options:
       --json               JSON output even in a terminal
       --session <SESSION>  The hc session to reach, like HC_SESSION (one command that reads the same in sh, cmd and PowerShell)
   -h, --help               Print help
+```
+
+## hc ended
+
+```text
+Who ended or removed terminals, oldest first: this core's journal
+
+Usage: hc ended [OPTIONS]
+
+Options:
+      --json              JSON output even in a terminal
+      --since <DURATION>  Only what happened within this long: 30s, 10m, 4h, 2d
+  -h, --help              Print help
 ```
 
 ## hc events

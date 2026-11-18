@@ -67,6 +67,83 @@ pub fn listen(path: &Path) -> io::Result<Listener> {
 pub type AsyncRead = tokio::net::unix::OwnedReadHalf;
 pub type AsyncWrite = tokio::net::unix::OwnedWriteHalf;
 
+/// The process on the other end of an accepted connection, from the socket's
+/// peer credentials. `name` is its `comm`; `None` when the OS cannot say.
+pub fn peer_process(stream: &impl std::os::fd::AsRawFd) -> Option<crate::platform::PeerProcess> {
+    let pid = peer_pid(stream)?;
+    Some(crate::platform::PeerProcess { pid, name: process_name(pid).unwrap_or_default() })
+}
+
+#[cfg(target_os = "linux")]
+fn peer_pid(stream: &impl std::os::fd::AsRawFd) -> Option<i32> {
+    let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
+    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let ok = unsafe {
+        libc::getsockopt(stream.as_raw_fd(), libc::SOL_SOCKET, libc::SO_PEERCRED, (&raw mut cred).cast(), &mut len)
+    } == 0;
+    (ok && cred.pid > 0).then_some(cred.pid)
+}
+
+/// macOS has no `SO_PEERCRED`; `LOCAL_PEERPID` reports the peer's pid.
+#[cfg(target_os = "macos")]
+fn peer_pid(stream: &impl std::os::fd::AsRawFd) -> Option<i32> {
+    let mut pid: libc::pid_t = 0;
+    let mut len = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+    let ok = unsafe {
+        libc::getsockopt(stream.as_raw_fd(), libc::SOL_LOCAL, libc::LOCAL_PEERPID, (&raw mut pid).cast(), &mut len)
+    } == 0;
+    (ok && pid > 0).then_some(pid)
+}
+
+/// A process's `comm` (15 bytes as the kernel keeps it). `None` when there is
+/// no such process or its name cannot be read.
+pub fn process_name(pid: i32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let name = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
+        let name = name.trim_end();
+        (!name.is_empty()).then(|| name.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut name = [0u8; 256];
+        let n = unsafe { libc::proc_name(pid, name.as_mut_ptr().cast(), name.len() as u32) };
+        (n > 0).then(|| String::from_utf8_lossy(&name[..n as usize]).into_owned())
+    }
+}
+
+/// A process's parent, for walking up to the program a terminal runs.
+pub fn parent_of(pid: i32) -> Option<i32> {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        // comm can hold spaces and parentheses; only its final ') ' ends it.
+        let rest = stat.rsplit_once(") ")?.1;
+        rest.split_whitespace().nth(1)?.parse().ok()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+        let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+        let read = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size) };
+        (read == size).then_some(info.pbi_ppid as i32)
+    }
+}
+
+/// The terminal whose program is `pid` or one of its ancestors: `terminal`
+/// answers with the address a program pid belongs to. Bounded, so a pid that
+/// is gone or in a loop stops the walk.
+pub fn ancestor_terminal(pid: i32, terminal: impl Fn(i32) -> Option<String>) -> Option<String> {
+    let mut at = pid;
+    for _ in 0..32 {
+        if let Some(address) = terminal(at) {
+            return Some(address);
+        }
+        at = parent_of(at).filter(|parent| *parent > 0)?;
+    }
+    None
+}
+
 /// Read EOF can be a caller's SHUT_WR: probe the reply side without sending bytes.
 pub async fn reply_closed(read: &AsyncRead) {
     loop {
@@ -101,9 +178,12 @@ impl AsyncListener {
         Ok(AsyncListener(tokio::net::UnixListener::from_std(bound)?))
     }
 
-    pub async fn accept(&mut self) -> io::Result<(AsyncRead, AsyncWrite)> {
+    pub async fn accept(&mut self) -> io::Result<(AsyncRead, AsyncWrite, Option<crate::platform::PeerProcess>)> {
         let (stream, _) = self.0.accept().await?;
-        Ok(stream.into_split())
+        // Before the split: peer credentials belong to the socket.
+        let peer = peer_process(&stream);
+        let (read, write) = stream.into_split();
+        Ok((read, write, peer))
     }
 }
 
@@ -151,6 +231,12 @@ pub fn private_file(path: &Path) -> io::Result<File> {
 /// Takes the lock on `file` unless someone else holds it.
 pub fn try_lock(file: &File) -> bool {
     unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 }
+}
+
+/// Opens a file for appending, created `0600` when it is new (the journal).
+pub fn append_file(path: &Path) -> io::Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new().append(true).create(true).mode(0o600).open(path)
 }
 
 pub fn make_executable(path: &Path) -> io::Result<()> {

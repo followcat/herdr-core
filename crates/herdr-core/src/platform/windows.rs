@@ -324,11 +324,17 @@ impl AsyncListener {
         unsafe { options.create_with_security_attributes_raw(name, pipe_security()? as *mut c_void) }
     }
 
-    pub async fn accept(&mut self) -> io::Result<(AsyncRead, AsyncWrite)> {
+    pub async fn accept(&mut self) -> io::Result<(AsyncRead, AsyncWrite, Option<crate::platform::PeerProcess>)> {
         self.next.connect().await?;
         let connected = std::mem::replace(&mut self.next, Self::create(&self.name, false)?);
-        Ok(tokio::io::split(connected))
+        let (read, write) = tokio::io::split(connected);
+        Ok((read, write, None))
     }
+}
+
+/// A named pipe's client has no OS-readable process identity.
+pub fn ancestor_terminal(_pid: i32, _terminal: impl Fn(i32) -> Option<String>) -> Option<String> {
+    None
 }
 
 /// Pipe names vanish with their last handle.
@@ -365,6 +371,11 @@ pub fn private_dir(path: &Path) -> io::Result<()> {
 /// A new file with the user state directory's inherited permissions.
 pub fn private_file(path: &Path) -> io::Result<File> {
     std::fs::OpenOptions::new().write(true).create_new(true).open(path)
+}
+
+/// Opens a file for appending, created when it is new (the journal).
+pub fn append_file(path: &Path) -> io::Result<File> {
+    std::fs::OpenOptions::new().append(true).create(true).open(path)
 }
 
 pub fn try_lock(file: &File) -> bool {

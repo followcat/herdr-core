@@ -18,8 +18,9 @@ capability, and a generation-1 client that ignores them behaves as before.
 Two questions decide what a client may use:
 
 1. **`hello` capabilities.** `hello.result.features` lists
-   `os_hostname`, `quiet_human_release`, `repository_facts` and
-   `record_activity` when this core has them. Official hc never lists them.
+   `os_hostname`, `quiet_human_release`, `repository_facts`,
+   `record_activity` and `ended_by` when this core has them. Official hc
+   never lists them.
 2. **Field presence.** A fact arrives only where it is supported, and absence
    means **unsupported, never "none observed"**: `null`/missing counts are
    unknown, not zero.
@@ -29,7 +30,8 @@ Two questions decide what a client may use:
 {"jsonrpc":"2.0","id":1,"result":{"generation":1,"version":"0.1.21-followcat.1",
   "features":["framed","attach","events","status","shell","resize_notifications",
               "automatic_input","os_hostname","quiet_human_release",
-              "repository_facts","record_activity","restart_environment","put_chunks"]}}
+              "repository_facts","record_activity","restart_environment",
+              "put_chunks","ended_by"]}}
 ```
 
 A version check is *not* a capability check: the fork suffix
@@ -156,6 +158,53 @@ report a hostname to a client whose own core lacks the feature: treat it as
 optional.
 
 **Doc:** [c3-compatibility.md](c3-compatibility.md).
+
+## Who ended a terminal: `ended_by`
+
+**What it is:** a terminal's record says how it ended (`reason`) but not who
+asked. This fork adds an optional `ended_by` to the record, filled when the
+end came from a request, a parent cascade or the core itself — never when a
+program exited by itself:
+
+```json
+{"address":"t3","state":"finished","reason":"killed",
+ "ended_by":{"by":"terminal.kill","caller":"t1","pid":4821,"comm":"hc","terminal":"t1"}}
+```
+
+- `by`: the request (`terminal.kill`, `terminal.rm` on the journal's removed
+  line) or the cause — `die_with_parent`, `server_stop`, `host_shutdown`.
+- `caller`: the request's caller, as this core names it (`t3`, `rohan/t3`,
+  or `ppid:<pid>` when hc was not typed inside a terminal).
+- `pid`/`comm`: the process that sent the request over the core's socket
+  (Unix only; a Windows named pipe names no peer).
+- `terminal`: the terminal that process runs in, found by walking its
+  parents up to a program this core started.
+- `core`: the core the request came through, for a request from a machine.
+- `parent`, `parent_by`: for `die_with_parent`, the parent that ended and its
+  own `ended_by`.
+
+The record is deleted by `terminal.rm`, so the core also keeps a journal, one
+JSON line per end and per removal, in the session's state directory:
+`<state dir>/ended.jsonl`, rotated at 1 MiB into `ended.jsonl.1` (one previous
+file kept), file mode `0600`. A line holds `time_ms` (UTC epoch
+milliseconds), `event` (`ended` or `removed`), `address`, `name`, the
+`herdr.space`/`herdr.tab` labels, `program` (the basename of `argv[0]` only),
+`reason`, `exit_code`, `signal` and `ended_by`. It never holds argv beyond
+that basename, an environment, cwd contents or screen text. A journal that
+cannot be written never fails the request; it is logged once.
+
+**How to call it:** `terminal.get`, `terminal.list` (`hc get`, `hc ls --all`)
+and the `finished`/`lost` event data carry `ended_by`; `hc ended [--since 1h]
+[--json]` prints the journal oldest first (`--json`: one array), and
+`hc ended --since` takes `30s`, `10m`, `4h`, `2d`, `all`.
+
+**Since:** `0.1.21-followcat.2`.
+
+**Detection:** the `hello` feature `ended_by`, or the field on a record. A
+machine whose core lacks it has the field stripped from records mirrored here,
+so absence stays "unsupported", never "nobody ended it".
+
+**Diverges:** official hc has no such field, no journal and no `hc ended`.
 
 ## Repository facts: `repository_facts`
 

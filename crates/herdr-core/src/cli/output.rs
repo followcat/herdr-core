@@ -145,7 +145,8 @@ pub(super) fn items(terminals: &[Value], header: bool) -> Vec<picker::Item> {
 
 /// The facts an agent acts on; `hc get` has the full record.
 pub(super) fn short(t: &Value) -> Value {
-    let keep = ["address", "name", "template", "parent", "state", "turn", "exit_code", "signal", "reason", "cwd"];
+    let keep =
+        ["address", "name", "template", "parent", "state", "turn", "exit_code", "signal", "reason", "ended_by", "cwd"];
     let mut out: serde_json::Map<String, Value> =
         keep.iter().filter_map(|k| t.get(*k).filter(|v| !v.is_null()).map(|v| (k.to_string(), v.clone()))).collect();
     if let Some(word) = t["status"]["state"].as_str() {
@@ -282,6 +283,10 @@ pub(super) fn describe(t: &Value) -> String {
     );
     if let Some(first) = t.get("first_message").filter(|f| f["sent"] == false) {
         description.push_str(&format!("\n  first message NOT sent: {}", first["reason"].as_str().unwrap_or("?")));
+    }
+    if let Some(by) = t.get("ended_by").and_then(|by| serde_json::from_value::<crate::ended::EndedBy>(by.clone()).ok())
+    {
+        description.push_str(&format!("\n  ended by: {}", by.describe()));
     }
     description
 }

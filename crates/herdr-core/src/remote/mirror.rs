@@ -8,7 +8,8 @@ mod compat;
 /// A downgraded hello is already enough to invalidate facts. Waiting for its
 /// inventory would leave old Done/checkout facts visible during a stalled call.
 pub(super) fn capabilities(core: &Core, st: &mut State, m: &Machine, features: &[String]) {
-    if ["repository_facts", "record_activity"].iter().all(|wanted| features.iter().any(|f| f == wanted)) {
+    let wanted = ["repository_facts", "record_activity", "ended_by"];
+    if wanted.iter().all(|wanted| features.iter().any(|f| f == wanted)) {
         return;
     }
     let mut changed = Vec::new();
@@ -41,6 +42,10 @@ pub(super) fn supported(value: &mut Value, features: &[String]) {
     }
     if object.get("address").is_some_and(Value::is_string) && !features.iter().any(|f| f == "record_activity") {
         object.remove("activity");
+    }
+    // Said who ended it (fork).
+    if object.get("address").is_some_and(Value::is_string) && !features.iter().any(|f| f == "ended_by") {
+        object.remove("ended_by");
     }
     for key in ["terminals", "terminal", "record"] {
         if let Some(value) = object.get_mut(key) {
@@ -173,6 +178,12 @@ pub(super) fn apply(record: &mut Value, kind: &str, data: &Value) {
                 record["pid"] = Value::Null;
             }
             set(record, &["reason", "exit_code", "signal", "finished_ms"]);
+            // Who ended it (fork): absent after a program exited by itself.
+            if let Some(by) = data.get("ended_by") {
+                record["ended_by"] = by.clone();
+            } else if let Some(object) = record.as_object_mut() {
+                object.remove("ended_by");
+            }
             record.as_object_mut().map(|r| r.remove("foreground"));
         }
         "status" => {

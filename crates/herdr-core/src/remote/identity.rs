@@ -72,7 +72,7 @@ mod tests {
             let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
             let result = runtime.block_on(async {
                 serving.output(&mut serving.lock(), id, b"alive\r\n\x1b]7501;state=working\x1b\\");
-                let call = crate::api::Call { core: &serving, conn: None, plain: None };
+                let call = crate::api::Call { core: &serving, conn: None, plain: None, peer: None };
                 let record = crate::api::dispatch(&call, "terminal.get", json!({"terminal":"t1"})).await.unwrap();
                 let status = crate::api::dispatch(&call, "server.status", json!({})).await.unwrap();
                 record["status"]["state"] == "working"

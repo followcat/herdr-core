@@ -465,6 +465,7 @@ impl Core {
                 t.reason = None;
                 t.exit_code = None;
                 t.signal = None;
+                t.ended_by = None;
                 crate::activity::initialize(t, &self.info.id, &self.activity_epoch);
                 let created = t.clone();
                 let public = serde_json::to_value(crate::terminals::Public(created.clone())).unwrap_or_default();

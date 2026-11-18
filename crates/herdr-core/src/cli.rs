@@ -86,6 +86,12 @@ enum Cmd {
     Events(SubscribeParams),
     /// Templates you can run by name (~/.config/herdr-core/templates).
     Templates,
+    /// Who ended or removed terminals, oldest first: this core's journal.
+    Ended {
+        /// Only what happened within this long: 30s, 10m, 4h, 2d.
+        #[arg(long, value_name = "DURATION")]
+        since: Option<String>,
+    },
     /// Swap this hc for another build and restart (terminals keep running).
     Update {
         /// A herdr-core binary to use (default: download the latest release).
@@ -442,7 +448,7 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
             Out { json: r, human }
         }
         Cmd::Rm(mut p) => {
-            p.terminal = pick_finished(p.terminal)?;
+            (p.terminal, p.caller) = (pick_finished(p.terminal)?, Some(caller()));
             let r = call("terminal.rm", to(&p))?;
             let human = format!("removed {}", r["removed"].as_str().unwrap_or("?"));
             Out { json: r, human }
@@ -536,6 +542,38 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
                 rows.join("\n")
             };
             Out { json: r, human }
+        }
+        Cmd::Ended { since } => {
+            // Local only: the journal is this session's state, and reading it
+            // must not start a core.
+            let within = match since.as_deref() {
+                Some(text) => parse_span(text)?,
+                None => None,
+            };
+            let now = crate::runtime::now_ms();
+            let mut json_lines = Vec::new();
+            let mut human_lines = Vec::new();
+            for line in crate::ended::lines(&paths.state).map_err(|e| RpcError::internal(e.to_string()))? {
+                let value: serde_json::Value =
+                    serde_json::from_str(&line).unwrap_or_else(|_| serde_json::json!({ "raw": line }));
+                let Ok(read) = serde_json::from_value::<crate::ended::Read>(value.clone()) else {
+                    // Keep what is there: a person asked what the journal says.
+                    json_lines.push(value);
+                    human_lines.push(line);
+                    continue;
+                };
+                if within.is_some_and(|span| now.saturating_sub(read.time_ms) > span) {
+                    continue;
+                }
+                human_lines.push(read.describe());
+                json_lines.push(value);
+            }
+            if human_lines.is_empty() {
+                human_lines.push(format!("no ends recorded in {}", crate::ended::path(&paths.state).display()));
+            }
+            let human = human_lines.join("\n");
+            let json = serde_json::Value::Array(json_lines);
+            Out { json, human }
         }
         Cmd::Schema => {
             let r = call("rpc.discover", json!({}))?;
@@ -661,6 +699,26 @@ fn from_here(cwd: Option<String>) -> Option<String> {
 /// Who is asking: this hc terminal, else the shell or script that ran us.
 fn caller() -> String {
     client::terminal_id().unwrap_or_else(|| format!("ppid:{}", crate::platform::parent_pid()))
+}
+
+/// `30s`, `10m`, `4h`, `2d` (bare digits are seconds); `all` or empty is no
+/// limit. Milliseconds, for comparing against journal timestamps.
+fn parse_span(text: &str) -> Result<Option<u64>, RpcError> {
+    let text = text.trim();
+    if text.is_empty() || text.eq_ignore_ascii_case("all") {
+        return Ok(None);
+    }
+    let (number, unit) = match text.as_bytes().last() {
+        Some(b's') => (&text[..text.len() - 1], 1u64),
+        Some(b'm') => (&text[..text.len() - 1], 60),
+        Some(b'h') => (&text[..text.len() - 1], 3_600),
+        Some(b'd') => (&text[..text.len() - 1], 86_400),
+        _ => (text, 1),
+    };
+    let secs = number.trim().parse::<u64>().ok().and_then(|n| n.checked_mul(unit));
+    secs.map(|s| Some(s.saturating_mul(1_000))).ok_or_else(|| {
+        RpcError::new("usage", format!("expected a span like 30s, 10m, 4h or 2d, got {text:?}"), "hc ended --since 1h")
+    })
 }
 
 /// Prints the snapshot, then every notification until the core goes away.

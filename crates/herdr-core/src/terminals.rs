@@ -44,6 +44,10 @@ pub struct Terminal {
     /// died by signal without an exit code), holder_lost (its holder
     /// died), stopped_by_restart (nothing ran it any more after a restart).
     pub reason: Option<String>,
+    /// Who ended it: the request, parent cascade or core that did, rather than
+    /// its own program exiting (fork). Absent for a program that exited itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_by: Option<crate::ended::EndedBy>,
     pub created_ms: u64,
     pub finished_ms: Option<u64>,
     /// "exact", or "inexact" after a core crash (older history may be missing).
@@ -300,6 +304,7 @@ impl Registry {
                 exit_code: None,
                 signal: None,
                 reason: None,
+                ended_by: None,
                 created_ms: now_ms,
                 finished_ms: None,
                 screen: "exact".into(),

@@ -6,6 +6,7 @@ pub mod cli;
 pub mod client;
 pub mod config;
 pub mod detect;
+pub mod ended;
 pub mod events;
 pub mod exec;
 pub mod files;

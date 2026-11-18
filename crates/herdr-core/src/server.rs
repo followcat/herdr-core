@@ -95,8 +95,8 @@ pub fn serve() -> io::Result<()> {
         loop {
             tokio::select! {
                 accepted = listener.accept() => {
-                    let (read, write) = accepted?;
-                    tokio::spawn(connection(core.clone(), read, write));
+                    let (read, write, peer) = accepted?;
+                    tokio::spawn(connection(core.clone(), read, write, peer));
                 }
                 _ = core.stop.notified() => break,
                 // Keep programs/screens, but only an explicit restart preserves environment.
@@ -179,7 +179,12 @@ fn hostname() -> String {
 
 /// A connection starts in plain mode (one JSON-RPC message per line);
 /// a successful `hello` with `framed: true` switches it to frames.
-async fn connection(core: Arc<Core>, read: platform::AsyncRead, mut write: Writer) -> io::Result<()> {
+async fn connection(
+    core: Arc<Core>,
+    read: platform::AsyncRead,
+    mut write: Writer,
+    peer: Option<platform::PeerProcess>,
+) -> io::Result<()> {
     let mut read = BufReader::new(read);
     let mut line = String::new();
     let plain = std::sync::Mutex::new(None);
@@ -198,7 +203,7 @@ async fn connection(core: Arc<Core>, read: platform::AsyncRead, mut write: Write
         if line.trim().is_empty() {
             continue;
         }
-        let handling = handle(&core, None, Some(&plain), line.as_bytes());
+        let handling = handle(&core, None, Some(&plain), peer.as_ref(), line.as_bytes());
         // An exec ends when its caller goes away.
         let method = serde_json::from_str::<Value>(&line).ok().and_then(|r| r["method"].as_str().map(String::from));
         let handled = match method.as_deref() {
@@ -257,7 +262,7 @@ async fn connection(core: Arc<Core>, read: platform::AsyncRead, mut write: Write
     // It ends when it closes, can't be written to, or stopped reading so long
     // that its replies passed `MAX_CONTROL`.
     let result = tokio::select! {
-        result = read_frames(&core, &conn, &mut read) => result,
+        result = read_frames(&core, &conn, peer.as_ref(), &mut read) => result,
         _ = &mut writer => Ok(()),
         () = conn.end.notified() => Ok(()),
         () = conn.overflowed.notified() => {
@@ -367,12 +372,18 @@ async fn write_frames(core: Arc<Core>, conn: Arc<Conn>, mut write: Writer) -> io
     }
 }
 
-async fn read_frames(core: &Arc<Core>, conn: &Arc<Conn>, read: &mut Reader) -> io::Result<()> {
+async fn read_frames(
+    core: &Arc<Core>,
+    conn: &Arc<Conn>,
+    peer: Option<&platform::PeerProcess>,
+    read: &mut Reader,
+) -> io::Result<()> {
     let u16_at = |p: &[u8], i: usize| u16::from_le_bytes([p[i], p[i + 1]]);
     // Execs and puts running for this connection by request id: they end when it
     // closes, or when it gives up on one (`$/cancelRequest`).
     let mut execs = Execs::default();
     let mut sends = Sends::default();
+    let peer = peer.cloned();
     while let Some((channel, kind, payload)) = wire::read_frame(read).await? {
         if channel != 0 && crate::remote::relay_in(core, conn, channel, kind, &payload) {
             continue;
@@ -396,10 +407,12 @@ async fn read_frames(core: &Arc<Core>, conn: &Arc<Conn>, read: &mut Reader) -> i
                 }
                 let cancelled = sends.track(&request);
                 let pending = crate::api::begin_read(conn, &request);
-                let (core, conn) = (core.clone(), conn.clone());
+                let (core, conn, peer) = (core.clone(), conn.clone(), peer.clone());
                 let task = tokio::spawn(async move {
                     let _pending = pending;
-                    let handled = SEND_CANCELLED.scope(cancelled, handle(&core, Some(&conn), None, &payload)).await;
+                    let handled = SEND_CANCELLED
+                        .scope(cancelled, handle(&core, Some(&conn), None, peer.as_ref(), &payload))
+                        .await;
                     if let Some(reply) = &handled.reply {
                         conn.with(|out| {
                             out.control(wire::encode(0, wire::DATA, reply.to_string().as_bytes()));
@@ -508,6 +521,7 @@ async fn handle(
     core: &Arc<Core>,
     conn: Option<&Arc<Conn>>,
     plain: Option<&std::sync::Mutex<Option<api::PlainSub>>>,
+    peer: Option<&platform::PeerProcess>,
     message: &[u8],
 ) -> Handled {
     let reply = |reply| Handled { reply: Some(reply), framed: false, stop: false };
@@ -519,7 +533,7 @@ async fn handle(
         let err = RpcError::invalid_request("missing method");
         return reply(rpc::response(request["id"].clone(), Err(err)));
     };
-    let call = api::Call { core, conn, plain };
+    let call = api::Call { core, conn, plain, peer };
     let params = crate::remote::from_peer(core, conn, request["params"].clone());
     let result = match crate::remote::route(core, method, &params) {
         _ if method == "$/orphaned" => crate::remote::orphaned(core, conn, &params).await,

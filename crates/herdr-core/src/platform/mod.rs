@@ -8,6 +8,15 @@ pub use foreground::*;
 mod session;
 pub use session::{LoginSession, holder_current};
 
+/// The process on the other end of a client connection, when the OS names it.
+/// Windows named pipes carry no peer identity: there it is always `None`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PeerProcess {
+    pub pid: i32,
+    /// Its `comm` (`hc`, `herdr-core`); empty when unreadable.
+    pub name: String,
+}
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]

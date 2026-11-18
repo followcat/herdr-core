@@ -313,7 +313,7 @@ async fn server_stop_succeeds_even_when_the_registry_flush_times_out() {
         Ok(())
     })
     .unwrap();
-    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
     let started = Instant::now();
     let stop = crate::api::dispatch(&call, "server.stop", json!({})).await;
     release.send(()).unwrap();
@@ -382,7 +382,7 @@ async fn label_and_kill_reply_with_the_record_observed_before_flushing() {
             id
         };
         let reply = {
-            let call = crate::api::Call { core: &core, conn: None, plain: None };
+            let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
             let request =
                 crate::api::dispatch(&call, method, json!({"terminal": crate::terminals::address(id), "labels": {}}));
             tokio::pin!(request);
@@ -462,7 +462,7 @@ async fn queued_machine_snapshots_cannot_restore_a_machine_after_rename_and_remo
     let first: serde_json::Value =
         serde_json::from_slice(&writes.recv_timeout(Duration::from_secs(1)).unwrap()).unwrap();
     assert_eq!(first[0]["hostname"], "host-b");
-    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
     // Cancel only the replies while the first write is held: both mutations
     // must still enter the same ordered queue under Core.state.
     assert!(
@@ -505,7 +505,7 @@ async fn a_prepared_restart_survives_sigterm_and_rejects_stop() {
     };
     paths.create_dirs().unwrap();
     let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into(), hostname: None }).unwrap();
-    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
     crate::api::dispatch(&call, "server.restart", serde_json::json!({})).await.unwrap();
     crate::restart::on_sigterm(&core);
     assert!(core.paths.state.join("restart-env.json").exists(), "SIGTERM keeps the explicit restart's note");

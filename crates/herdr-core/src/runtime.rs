@@ -7,7 +7,7 @@ use crate::paths::Paths;
 use crate::paths::{read_state, write_atomic};
 use crate::platform::{self, Stream as UnixStream, signal};
 use crate::relay::Relay;
-use crate::terminals::Registry;
+use crate::terminals::{Registry, Terminal};
 use crate::viewers::Viewer;
 use ghostty_vt::Terminal as Screen;
 use std::collections::{HashMap, HashSet};
@@ -109,6 +109,10 @@ pub struct State {
     pub holders: Vec<Link>,
     pub pending: HashMap<u32, oneshot::Sender<Result<crate::terminals::Terminal, String>>>,
     pub killing: HashSet<u32>,
+    /// Why each terminal in `killing` is ending (fork): the request or the
+    /// parent cascade that asked, recorded on its end. Never persisted; it
+    /// belongs to the request in flight.
+    pub end_requests: std::collections::BTreeMap<u32, crate::ended::EndedBy>,
     pub stopping: bool,
     pub machines: Vec<crate::machines::Machine>,
     /// The line to each machine, by its core id, and the task keeping it up.
@@ -400,8 +404,16 @@ impl Core {
         } else {
             reason
         };
+        // Who asked (fork): the request or cascade that marked it killing, else
+        // the core itself for a stop or a host shutdown. A program that exited
+        // by itself has none.
+        let ended_by = st.end_requests.remove(&id).or_else(|| match reason {
+            "server_stop" | "host_shutdown" => Some(crate::ended::EndedBy::cause(reason)),
+            _ => None,
+        });
         if let Some(t) = st.reg.terminals.get_mut(&id) {
             t.first_task_turn = None;
+            t.ended_by = ended_by.clone();
             let change = crate::status::reset(t);
             let reset = self.reset_activity(st, id);
             if reset && !change.status {
@@ -410,8 +422,14 @@ impl Core {
             self.status_changed(st, id, change);
         }
         st.reg.finish(id, exit.code, exit.signal, reason, now_ms());
+        if let Some(t) = st.reg.terminals.get(&id) {
+            self.journal(t, "ended", t.ended_by.as_ref());
+        }
         let finished_ms = st.reg.terminals.get(&id).and_then(|t| t.finished_ms);
-        let end = serde_json::json!({"reason": reason, "exit_code": exit.code, "signal": exit.signal, "finished_ms": finished_ms});
+        let mut end = serde_json::json!({"reason": reason, "exit_code": exit.code, "signal": exit.signal, "finished_ms": finished_ms});
+        if let Some(by) = &ended_by {
+            end["ended_by"] = serde_json::to_value(by).unwrap_or_default();
+        }
         let pending = st.reg.terminals[&id].is_live();
         self.emit(st, if pending { "lost" } else { "finished" }, id, end.clone());
         if pending {
@@ -468,17 +486,46 @@ impl Core {
     }
 
     pub fn remove(&self, st: &mut State, id: u32) {
+        self.remove_with(st, id, None);
+    }
+
+    /// Forget a finished terminal. `removed_by` is the request that asked
+    /// (`terminal.rm`), for the journal only: the record itself is gone.
+    pub fn remove_with(&self, st: &mut State, id: u32, removed_by: Option<&crate::ended::EndedBy>) {
         // Gone before it is announced: a fresh snapshot for a subscriber that
         // fell behind must not bring it back.
         st.screen_status.remove(&id);
         st.foreground.remove(&id);
         let Some(was) = st.reg.terminals.remove(&id) else { return };
+        // The end line already says who ended it; this one says who removed it,
+        // falling back to the record's own `ended_by` (prune, `--rm`).
+        self.journal(&was, "removed", removed_by.or(was.ended_by.as_ref()));
         st.repositories.remove(id);
         self.emit_from(st, "removed", id, serde_json::json!({}), Some(&was));
         let _ = std::fs::remove_file(self.snapshot_path(id));
         crate::api::forget_puts(st, |t| t.terminal == id);
         let _ = std::fs::remove_dir_all(crate::put::dir(&self.paths.state, id));
         self.save(st);
+    }
+
+    /// One journal line (fork). Only `argv[0]`'s basename goes in: argv,
+    /// environment, cwd and screen text never do.
+    fn journal(&self, t: &Terminal, event: &str, ended_by: Option<&crate::ended::EndedBy>) {
+        let program = t.argv.first().map(|a| crate::ended::basename(a)).unwrap_or_default();
+        crate::ended::record(
+            &self.paths.state,
+            &crate::ended::Entry {
+                event,
+                address: &t.address,
+                name: t.name.as_deref(),
+                labels: &t.labels,
+                program: &program,
+                reason: t.reason.as_deref(),
+                exit_code: t.exit_code,
+                signal: t.signal,
+                ended_by,
+            },
+        );
     }
 
     pub fn signal(&self, st: &State, id: u32, signal: i32) {

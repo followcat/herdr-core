@@ -32,6 +32,7 @@ No terminal
 
 More
   templates                   list templates
+  ended [--since 1h]          who ended or removed terminals (this core's journal)
   events                      follow changes live
   server start|stop|status|restart
                               stop parks kept terminals; next core start gives them shells

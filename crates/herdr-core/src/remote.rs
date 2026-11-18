@@ -406,7 +406,7 @@ async fn from_machine(core: Arc<Core>, m: Machine, line: Arc<Line>, message: Val
             if let Some(caller) = params["caller"].as_str() {
                 params["caller"] = format!("{}/{caller}", m.name).into();
             }
-            let call = crate::api::Call { core: &core, conn: None, plain: None };
+            let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
             crate::api::dispatch(&call, method, params).await
         }
     };
@@ -485,6 +485,15 @@ pub fn is_peer(core: &Core, conn: &Arc<Conn>) -> bool {
     core.lock().peer_lines.values().any(|(k, _)| *k == key)
 }
 
+/// What the peer core on this connection calls itself, when it is one (fork:
+/// a request that ends a terminal here names the core it came through).
+pub fn peer_name(core: &Core, conn: &Arc<Conn>) -> Option<String> {
+    let key = conn_key(conn);
+    let st = core.lock();
+    let id = st.peer_lines.iter().find(|(_, (k, _))| *k == key).map(|(id, _)| id.clone())?;
+    st.peers.get(&id).map(|peer| peer.name.clone())
+}
+
 pub fn peer_left(core: &Core, conn: &Arc<Conn>) {
     let key = conn_key(conn);
     core.lock().peer_lines.retain(|_, (k, line)| {
@@ -548,6 +557,18 @@ pub async fn orphaned(core: &Arc<Core>, conn: Option<&Arc<Conn>>, params: &Value
             .map(|t| t.id())
             .collect();
         st.killing.extend(&kids);
+        // The parent lives on the core that dialed in: its own `ended_by` did
+        // not travel here, so only the address is known (fork).
+        for &id in &kids {
+            st.end_requests.insert(
+                id,
+                crate::ended::EndedBy {
+                    by: "die_with_parent".into(),
+                    parent: Some(address.clone()),
+                    ..crate::ended::EndedBy::default()
+                },
+            );
+        }
         kids
     };
     core.kill(&kids).await;

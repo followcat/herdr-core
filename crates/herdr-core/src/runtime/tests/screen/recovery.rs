@@ -626,7 +626,7 @@ async fn restart_and_handover_freeze_detection() {
     let (core, root) = test_core();
     let (id, _frames) = screen_agent(&core, "devin");
     core.output(&mut core.lock(), id, b"NEED YES\r\n");
-    let call = crate::api::Call { core: &core, conn: None, plain: None };
+    let call = crate::api::Call { core: &core, conn: None, plain: None, peer: None };
     crate::api::dispatch(&call, "server.restart", json!({})).await.unwrap();
     assert!(core.restart.load(std::sync::atomic::Ordering::SeqCst));
     {

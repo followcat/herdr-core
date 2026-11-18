@@ -28,6 +28,7 @@ pub const FEATURES: &[&str] = &[
     "record_activity",
     "restart_environment",
     "put_chunks",
+    "ended_by",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
@@ -65,6 +66,9 @@ pub struct Call<'a> {
     pub conn: Option<&'a Arc<crate::wire::Conn>>,
     /// Where a plain connection receives its subscription.
     pub plain: Option<&'a std::sync::Mutex<Option<PlainSub>>>,
+    /// The process on the other end of this connection, when the OS names it
+    /// (fork): recorded when this call ends a terminal.
+    pub peer: Option<&'a crate::platform::PeerProcess>,
 }
 
 impl std::ops::Deref for Call<'_> {
@@ -287,7 +291,13 @@ async fn terminal_get(core: Ctx<'_>, p: TerminalParams) -> Result<Public, RpcErr
 async fn terminal_kill(core: Ctx<'_>, p: TerminalParams) -> Result<Public, RpcError> {
     let id = resolve(core, &p.terminal)?;
     if core.lock().reg.terminals.get(&id).is_some_and(|t| t.is_live()) {
-        core.lock().killing.insert(id);
+        // Who asked, before the lock: the walk up to a terminal reads /proc.
+        let by = requested_by(core, "terminal.kill", p.caller.as_deref());
+        {
+            let mut st = core.lock();
+            st.killing.insert(id);
+            st.end_requests.insert(id, by);
+        }
         core.kill(&[id]).await;
     }
     core.saw(p.caller.as_deref(), id); // covers the exit it caused
@@ -298,6 +308,7 @@ async fn terminal_kill(core: Ctx<'_>, p: TerminalParams) -> Result<Public, RpcEr
 
 async fn terminal_rm(core: Ctx<'_>, p: TerminalParams) -> Result<RemoveResult, RpcError> {
     let id = resolve(core, &p.terminal)?;
+    let by = requested_by(core, "terminal.rm", p.caller.as_deref());
     {
         let mut st = core.lock();
         if st.reg.terminals.get(&id).is_some_and(|t| t.is_live()) {
@@ -307,10 +318,44 @@ async fn terminal_rm(core: Ctx<'_>, p: TerminalParams) -> Result<RemoveResult, R
                 format!("kill it first: hc kill {}", crate::terminals::address(id)),
             ));
         }
-        core.remove(&mut st, id);
+        core.remove_with(&mut st, id, Some(&by));
     }
     core.flush_saved().await?;
     Ok(RemoveResult { removed: crate::terminals::address(id) })
+}
+
+/// Who asked for this request, for the record and the journal (fork): the
+/// method, the caller it carried, and the client process the socket named —
+/// with the terminal that process runs in and the core it came through.
+fn requested_by(call: &Call<'_>, method: &str, caller: Option<&str>) -> crate::ended::EndedBy {
+    let mut by = crate::ended::EndedBy {
+        by: method.into(),
+        caller: caller.map(str::to_string),
+        ..crate::ended::EndedBy::default()
+    };
+    if let Some(conn) = call.conn
+        && let Some(name) = crate::remote::peer_name(call.core, conn)
+    {
+        by.core = Some(name);
+    }
+    let Some(peer) = call.peer else { return by };
+    by.pid = Some(peer.pid);
+    by.comm = (!peer.name.is_empty()).then(|| peer.name.clone());
+    // Its program, or one of its parents, is what this core started. The
+    // snapshot is taken here; the walk itself reads the OS outside the lock.
+    let programs: Vec<(i32, String)> = {
+        let st = call.core.lock();
+        st.reg
+            .terminals
+            .values()
+            .filter(|t| t.is_live())
+            .filter_map(|t| t.pid.and_then(|pid| i32::try_from(pid).ok().map(|pid| (pid, t.address.clone()))))
+            .collect()
+    };
+    by.terminal = crate::platform::ancestor_terminal(peer.pid, |pid| {
+        programs.iter().find(|(at, _)| *at == pid).map(|(_, address)| address.clone())
+    });
+    by
 }
 
 async fn terminal_keep(core: Ctx<'_>, p: KeepParams) -> Result<Public, RpcError> {

@@ -209,6 +209,8 @@ impl Core {
                     let address = crate::terminals::address(parent);
                     let kids: Vec<u32> = {
                         let mut st = self.lock();
+                        // The parent's own answer: who ended it, if anyone did.
+                        let parent_by = st.reg.terminals.get(&parent).and_then(|t| t.ended_by.clone());
                         let kids: Vec<u32> = st
                             .reg
                             .terminals
@@ -219,6 +221,17 @@ impl Core {
                             .map(Terminal::id)
                             .collect();
                         st.killing.extend(&kids);
+                        for &id in &kids {
+                            st.end_requests.insert(
+                                id,
+                                crate::ended::EndedBy {
+                                    by: "die_with_parent".into(),
+                                    parent: Some(address.clone()),
+                                    parent_by: parent_by.clone().map(Box::new),
+                                    ..crate::ended::EndedBy::default()
+                                },
+                            );
+                        }
                         kids
                     };
                     let core = self.clone();
