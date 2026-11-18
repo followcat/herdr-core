@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### New
+- **Cline's terminals get an agent name and a status.** The CLI never sends OSC 7501, so `cline -i` terminals showed no agent and no status; the fork's screen detection now recognises the npm shim and the package's own `.cline` executable, and reads working (its spinner), blocked (its `[y] Approve` box) and idle (its composer) from the screen. A spinner-less think stays `unknown` on purpose.
+- **A terminal's record says who ended it.** `ended_by` names the request, its caller, the client process and the terminal that process ran in (or the parent, core or host shutdown that did it), so `hc get`, `hc ls --all` and `hc events` answer "who killed this" instead of only "killed". `hc rm` deletes the record, so the core also keeps a journal of ends and removals, readable with `hc ended [--since 1h] [--json]`.
 - **A subscription can name the documents it wants, instead of receiving every one.** `hc events --doc <name>` (repeatable; a name ending in `*` is a prefix) delivers only those document changes, so a program that watches a single document no longer has every document change from every terminal delivered to it, and no longer has to filter them out itself. A subscriber that names none behaves exactly as before and still hears them all; a subscriber that selects a terminal and also names documents hears both.
 
 ## [0.1.21] - 2026-11-12
