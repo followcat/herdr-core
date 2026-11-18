@@ -46,9 +46,11 @@ get `idle`/`working`/`blocked`/`done` from their screen, so `wait`, parent
 notes, notifications and input observation work for them. A native 7501 report
 always wins and ends inference for that program's lifetime. The bundled rule
 manifests include the Command Code fixes (turn footers, tool and permission
-dialogs, wrapped controls, clipped labels, draft and folder-trust evidence) and
-Cline (its spinner, its `[y] Approve` box and its composer; a spinner-less
-think stays unknown).
+dialogs, wrapped controls, clipped labels, draft and folder-trust evidence,
+plus its `cmd -r` resume picker), Cline (its spinner, its `[y] Approve` box and
+its composer; a spinner-less think stays unknown) and `cursor-agent` (its
+spinner and `ctrl+c to stop` row, its approval and trust pickers, its resume
+picker, sign-in and usage limits, and its composer box).
 
 **How to call it:** call nothing. It arrives in the usual places:
 `terminal.get`, `terminal.list`, `terminal.wait`, snapshots and `status`

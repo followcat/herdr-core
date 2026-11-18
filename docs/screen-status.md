@@ -90,6 +90,7 @@ state yet, so the rule is unproven (or absent) until a capture exists.
 | `opencode` | `opencode`, `open-code`, `opencode2`, `opencode-ai` | blocked (captured); **working and evidence-backed idle: needs capture** |
 | `command-code` | `command-code`; node entrypoints under `node_modules/command-code` (never bare `cmd`) | working, tool/trust permissions, idle (captured) |
 | `cline` | `cline` (the npm shim), `.cline` (the package's own executable, also its `comm`); node entrypoints under `node_modules/cline` | working, permission and idle (captured); **a spinner-less think is unknown by design** |
+| `cursor` | `cursor-agent` (and its path via argv0, which its bash wrapper keeps) | working, approvals, workspace trust, resume picker, sign-in/usage limits, idle (captured) |
 
 Anything else — shells, editors, one-off tools — is not inferred at all.
 A terminal whose foreground is a plain shell or an unrecognized program has
@@ -113,6 +114,29 @@ nothing else on screen can stand in for them:
   spinner nor an unanswered `❯ <message>` as the newest line above it. Cline
   can think for a minute with neither spinner nor hint on screen; that screen
   stays `unknown`, because only positive evidence may publish a state.
+
+### Cursor (`cursor-agent`)
+
+Cursor's composer is a `▄`/`▀` box around a single `→ ` input row, with the
+model and folder under it. Each rule reads the region its evidence lives in:
+
+- **working**: `ctrl+c to stop` on the composer's input row, or a braille frame
+  leading an `-ing` activity word above the box (`bottom_non_empty_lines(10)`).
+- **blocked / permission**: an approval picker below the last full-width `─`
+  divider — the `→ ` option cursor, `Run Everything (shift+tab)`, and
+  `allowlist` or the tool's own question line — or the rounded workspace-trust
+  box (`[a] Trust this workspace`, `[q] Quit`).
+- **blocked / question**: the resume/chat picker (`All chats • <scope>`,
+  `↑/↓ to navigate`, `Enter to select`, `Esc to close`), which wants a
+  selection rather than an approval.
+- **blocked, no kind**: `please sign in to continue` (auth) and the terminal
+  usage/spend limits (`usage_limit_exceeded`, `concurrent_limit_exceeded`).
+- **idle**: the composer box's own `▀▀▀▀` and `→ ` rows, and never while
+  `ctrl+c to stop` is on them. A picker or the resume list has no box, so it
+  can never read as readiness.
+
+Command Code's resume picker (opened with `cmd -r`) is inferred the same way
+(blocked / question) instead of leaving the terminal `unknown`.
 
 ## Configuration
 
