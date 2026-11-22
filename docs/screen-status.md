@@ -34,7 +34,8 @@ Keep these apart; conflating them is where wrong behavior hides.
   point of inference: the winning rule publishes a `Status` record as the
   terminal's **effective root record** — not a `"screen"`-named child —
   through the same `status_changed` path as a native report. Inferred
-  records carry `"source": "screen"`; native records have no `source` field.
+  records carry `"source": "screen"` and name the matched agent in `app`
+  (`identify`'s id, e.g. `command-code`); native records have no `source` field.
   The field is an additive generation-1 extension: old clients ignore it and
   `released.openrpc.json` stays compatible. The *availability* checks that
   used to read `reported` — input observation (`input.rs`), `wait`

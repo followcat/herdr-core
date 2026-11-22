@@ -54,10 +54,13 @@ picker, sign-in and usage limits, and its composer box).
 
 **How to call it:** call nothing. It arrives in the usual places:
 `terminal.get`, `terminal.list`, `terminal.wait`, snapshots and `status`
-events. An inferred record carries `"source": "screen"` inside `status`:
+events. An inferred record carries `"source": "screen"` inside `status`, and
+names the matched agent in `app` (`identify`'s id: `command-code`, `cline`,
+`cursor`, …), so clients and `hc ls` name a silent agent as they name a
+reporting one:
 
 ```json
-{"status":{"state":"working","source":"screen"},"records":{},"reported":false}
+{"status":{"state":"working","app":"command-code","source":"screen"},"records":{},"reported":false}
 ```
 
 `reported` stays **false** for inferred status: it still means "the program

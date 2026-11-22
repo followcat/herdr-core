@@ -145,7 +145,13 @@ pub fn apply_inferred(t: &mut Terminal, state: &str, kind: Option<&str>) -> Chan
     if t.reported {
         return Change::default();
     }
-    let same = t.status.as_ref().is_some_and(|s| s.source.is_some() && s.state == state && s.kind.as_deref() == kind);
+    // The program the rules matched (`identify`'s id, e.g. `command-code`):
+    // clients name a silent agent by `app` as they do a reporting one.
+    let app = t.foreground.as_ref().and_then(|f| f.agent).unwrap_or_default();
+    let same = t
+        .status
+        .as_ref()
+        .is_some_and(|s| s.source.is_some() && s.state == state && s.kind.as_deref() == kind && s.app == app);
     if same {
         return Change::default();
     }
@@ -155,7 +161,7 @@ pub fn apply_inferred(t: &mut Terminal, state: &str, kind: Option<&str>) -> Chan
         state: state.into(),
         kind: kind.map(Into::into),
         progress: None,
-        app: String::new(),
+        app: app.into(),
         title: String::new(),
         msg: String::new(),
         source: Some("screen".into()),
@@ -284,6 +290,25 @@ mod tests {
             serde_json::to_value(t.status.as_ref().unwrap()).unwrap().get("source").is_none(),
             "native records carry no source"
         );
+    }
+
+    #[test]
+    fn an_inferred_root_names_the_matched_agent() {
+        let mut t = terminal();
+        apply_inferred(&mut t, "working", None);
+        assert_eq!(t.status.as_ref().unwrap().app, "", "no identified agent: no name");
+        t.foreground = Some(crate::foreground::Foreground {
+            pid: 7,
+            name: "command-code".into(),
+            argv: vec!["command-code".into()],
+            cwd: "/home/user".into(),
+            started: None,
+            agent: Some("command-code"),
+        });
+        assert!(apply_inferred(&mut t, "working", None).status, "the name is new evidence");
+        assert_eq!(serde_json::to_value(t.status.as_ref().unwrap()).unwrap()["app"], "command-code");
+        assert_eq!(apply_inferred(&mut t, "working", None), Change::default(), "same verdict, same name");
+        assert_eq!(t.turn, 0, "naming the agent starts no turn");
     }
 
     #[test]

@@ -8,6 +8,9 @@
 - **A terminal's record says who ended it.** `ended_by` names the request, its caller, the client process and the terminal that process ran in (or the parent, core or host shutdown that did it), so `hc get`, `hc ls --all` and `hc events` answer "who killed this" instead of only "killed". `hc rm` deletes the record, so the core also keeps a journal of ends and removals, readable with `hc ended [--since 1h] [--json]`.
 - **A subscription can name the documents it wants, instead of receiving every one.** `hc events --doc <name>` (repeatable; a name ending in `*` is a prefix) delivers only those document changes, so a program that watches a single document no longer has every document change from every terminal delivered to it, and no longer has to filter them out itself. A subscriber that names none behaves exactly as before and still hears them all; a subscriber that selects a terminal and also names documents hears both.
 
+### Fixed
+- **Screen-detected agents are named.** A status inferred from the screen left `app` empty, so clients showed a silent agent (Command Code, Cline, `cursor-agent`) by its terminal name and `hc ls` by its shell. The inferred record now names the agent the rules matched in `app`, e.g. `command-code`.
+
 ## [0.1.21] - 2026-11-12
 
 ### New
