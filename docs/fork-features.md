@@ -27,7 +27,7 @@ Two questions decide what a client may use:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"hello","params":{}}
-{"jsonrpc":"2.0","id":1,"result":{"generation":1,"version":"0.1.21-followcat.3",
+{"jsonrpc":"2.0","id":1,"result":{"generation":1,"version":"0.1.22-followcat.1",
   "features":["framed","attach","events","status","shell","resize_notifications",
               "automatic_input","os_hostname","quiet_human_release",
               "repository_facts","record_activity","restart_environment",
@@ -35,7 +35,7 @@ Two questions decide what a client may use:
 ```
 
 A version check is *not* a capability check: the fork suffix
-(`0.1.21-followcat.3`) says this is a fork, not which facts it publishes.
+(`0.1.22-followcat.1`) says this is a fork, not which facts it publishes.
 Ordinary upgrades use `hello`/`server.status` versions, as on official hc.
 
 
@@ -155,7 +155,7 @@ handshake, qualified by line state.
 
 ```json
 {"jsonrpc":"2.0","id":4,"method":"server.status","params":{}}
-{"jsonrpc":"2.0","id":4,"result":{"core":{"id":"…","name":"work","hostname":"box-a.example"},"version":"0.1.21-followcat.3"}}
+{"jsonrpc":"2.0","id":4,"result":{"core":{"id":"…","name":"work","hostname":"box-a.example"},"version":"0.1.22-followcat.1"}}
 ```
 
 **Since:** `0.1.17-followcat.9`.
@@ -315,8 +315,8 @@ answers.
 
 ## Fork versioning and updates
 
-**What it is:** this build's version is `0.1.21-followcat.3`: upstream's
-`0.1.21` plus a fork suffix. The suffix works everywhere the version appears
+**What it is:** this build's version is `0.1.22-followcat.1`: upstream's
+`0.1.22` plus a fork suffix. The suffix works everywhere the version appears
 (`hc --version`, `server.status`, `hello`) and in `hc update --from <binary>`.
 
 **How to call it:** read any version field and look for a `-followcat.N`
