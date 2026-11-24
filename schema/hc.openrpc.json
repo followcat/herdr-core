@@ -2483,6 +2483,13 @@
             "kind": "machine_unknown"
           },
           "message": "machine_unknown"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
         }
       ],
       "name": "terminal.kill",
@@ -2540,6 +2547,13 @@
             "kind": "live"
           },
           "message": "live"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
         }
       ],
       "name": "terminal.rm",
@@ -2590,6 +2604,13 @@
             "kind": "invalid_params"
           },
           "message": "invalid_params"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
         }
       ],
       "name": "terminal.keep",
@@ -2644,6 +2665,13 @@
             "kind": "invalid_params"
           },
           "message": "invalid_params"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
         }
       ],
       "name": "terminal.label",
@@ -3093,6 +3121,13 @@
             "kind": "config"
           },
           "message": "config"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
         }
       ],
       "name": "terminal.wait",
@@ -3325,7 +3360,7 @@
       }
     },
     {
-      "description": "Write bytes to a file beside a live terminal, on its machine, for its program to read (a pasted image). Lands in a folder of its own, removed with the terminal; the name is kept (a suffix when taken). To another machine it travels in pieces between other traffic, for as long as the link needs. Types nothing: paste the path yourself.",
+      "description": "Write bytes to a file beside a live terminal, on its machine, for its program to read (a pasted image). Lands in a folder of its own, removed with the terminal; the name is kept (a suffix when taken). On a direct route with chunk support, the timeout applies to each piece. A core sending the whole file to a relay applies its machine timeout to that call. Types nothing: paste the path yourself.",
       "errors": [
         {
           "code": -32000,
@@ -3361,6 +3396,13 @@
             "kind": "unavailable"
           },
           "message": "unavailable"
+        },
+        {
+          "code": -32603,
+          "data": {
+            "kind": "internal"
+          },
+          "message": "internal"
         }
       ],
       "name": "terminal.put",
@@ -3433,6 +3475,13 @@
           "message": "unavailable"
         },
         {
+          "code": -32603,
+          "data": {
+            "kind": "internal"
+          },
+          "message": "internal"
+        },
+        {
           "code": -32000,
           "data": {
             "kind": "needs_framed"
@@ -3500,11 +3549,25 @@
           "message": "not_found"
         },
         {
+          "code": -32000,
+          "data": {
+            "kind": "finished"
+          },
+          "message": "finished"
+        },
+        {
           "code": -32602,
           "data": {
             "kind": "invalid_params"
           },
           "message": "invalid_params"
+        },
+        {
+          "code": -32603,
+          "data": {
+            "kind": "internal"
+          },
+          "message": "internal"
         },
         {
           "code": -32000,
@@ -3577,6 +3640,13 @@
           "message": "invalid_params"
         },
         {
+          "code": -32603,
+          "data": {
+            "kind": "internal"
+          },
+          "message": "internal"
+        },
+        {
           "code": -32000,
           "data": {
             "kind": "needs_framed"
@@ -3605,6 +3675,20 @@
     {
       "description": "Between cores: give up a put; what came is removed. Also happens when its connection or terminal goes.",
       "errors": [
+        {
+          "code": -32602,
+          "data": {
+            "kind": "invalid_params"
+          },
+          "message": "invalid_params"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "unavailable"
+          },
+          "message": "unavailable"
+        },
         {
           "code": -32000,
           "data": {
@@ -4182,7 +4266,7 @@
           "message": "conflict"
         },
         {
-          "code": -32000,
+          "code": -32603,
           "data": {
             "kind": "internal"
           },
@@ -4258,7 +4342,7 @@
       }
     },
     {
-      "description": "Snapshot of matching terminals, then every fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind.",
+      "description": "Snapshot of matching terminals, then every matching fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind. Document-only subscriptions receive empty terminal snapshots.",
       "errors": [
         {
           "code": -32000,

@@ -97,8 +97,10 @@ async fn a_false_quiet_contract_stays_false_after_a_capable_reconnect() {
             there: 9,
             conn: conn.clone(),
             machine: machine.id.clone(),
+            terminal: "t1".into(),
             params: json!({"terminal":"t1","quiet_human_release":false}),
             active_at: Instant::now(),
+            size_pending: false,
         },
     );
     let (frames, mut rx) = mpsc::unbounded_channel();

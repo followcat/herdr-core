@@ -122,7 +122,7 @@ pub(crate) async fn finish(core: &Core) -> io::Result<()> {
         let _ = writeln!(io::stderr(), "core: final registry flush failed: {}", e.message);
     }
     if let Err(e) = core.flush_machines().await {
-        eprintln!("core: final machine flush failed: {}", e.message);
+        let _ = writeln!(io::stderr(), "core: final machine flush failed: {}", e.message);
     }
     Ok(())
 }
@@ -152,7 +152,10 @@ fn load_identity(state: &Path, machine_id: Option<String>) -> io::Result<CoreInf
     let saved: Option<Identity> = crate::paths::read_state(&path)?;
     let info = match saved {
         Some(saved) if saved.machine_id.is_some() && machine_id.is_some() && saved.machine_id != machine_id => {
-            eprintln!("core: this disk came from another machine: a new identity, its terminals forgotten");
+            let _ = writeln!(
+                io::stderr(),
+                "core: this disk came from another machine: a new identity, its terminals forgotten"
+            );
             // All gone before the new identity is written, or the next start tries again.
             for name in CLONE_FORGETS {
                 let p = state.join(name);
@@ -408,11 +411,11 @@ async fn read_frames(
                 let cancelled = sends.track(&request);
                 let pending = crate::api::begin_read(conn, &request);
                 let (core, conn, peer) = (core.clone(), conn.clone(), peer.clone());
-                let task = tokio::spawn(async move {
-                    let _pending = pending;
+                let call = async move {
                     let handled = SEND_CANCELLED
                         .scope(cancelled, handle(&core, Some(&conn), None, peer.as_ref(), &payload))
                         .await;
+                    drop(pending);
                     if let Some(reply) = &handled.reply {
                         conn.with(|out| {
                             out.control(wire::encode(0, wire::DATA, reply.to_string().as_bytes()));
@@ -426,7 +429,14 @@ async fn read_frames(
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                     handled.after(&core);
-                });
+                };
+                // Abort only affects begins already read on this connection. Its
+                // local handler never waits for a piece or for the network.
+                if request["method"] == "terminal.put_abort" {
+                    call.await;
+                    continue;
+                }
+                let task = tokio::spawn(call);
                 if matches!(request["method"].as_str(), Some("machine.exec" | "terminal.put")) {
                     execs.0.retain(|(_, exec)| !exec.is_finished());
                     execs.0.push((request["id"].to_string(), task.abort_handle()));

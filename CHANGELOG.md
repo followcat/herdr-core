@@ -6,10 +6,23 @@
 - **Cline's terminals get an agent name and a status.** The CLI never sends OSC 7501, so `cline -i` terminals showed no agent and no status; the fork's screen detection now recognises the npm shim and the package's own `.cline` executable, and reads working (its spinner), blocked (its `[y] Approve` box) and idle (its composer) from the screen. A spinner-less think stays `unknown` on purpose.
 - **Cursor's `cursor-agent` terminals get a name and a status,** and Command Code's `cmd -r` resume picker is recognised instead of leaving the terminal blank. `cursor-agent` never sends OSC 7501; the fork's screen detection now reads its running turn, its approval and workspace-trust pickers, its resume picker, sign-in and usage limits, and its composer.
 - **A terminal's record says who ended it.** `ended_by` names the request, its caller, the client process and the terminal that process ran in (or the parent, core or host shutdown that did it), so `hc get`, `hc ls --all` and `hc events` answer "who killed this" instead of only "killed". `hc rm` deletes the record, so the core also keeps a journal of ends and removals, readable with `hc ended [--since 1h] [--json]`.
-- **A subscription can name the documents it wants, instead of receiving every one.** `hc events --doc <name>` (repeatable; a name ending in `*` is a prefix) delivers only those document changes, so a program that watches a single document no longer has every document change from every terminal delivered to it, and no longer has to filter them out itself. A subscriber that names none behaves exactly as before and still hears them all; a subscriber that selects a terminal and also names documents hears both.
 
 ### Fixed
 - **Screen-detected agents are named.** A status inferred from the screen left `app` empty, so clients showed a silent agent (Command Code, Cline, `cursor-agent`) by its terminal name and `hc ls` by its shell. The inferred record now names the agent the rules matched in `app`, e.g. `command-code`.
+
+## [0.1.22] - 2026-11-22
+
+### New
+- **A subscription can name the documents it wants, instead of receiving every one.** `hc events --doc <name>` (repeatable; a name ending in `*` is a prefix) delivers only those document changes, so a program that watches a single document no longer gets every document change on the machines it watches, and no longer has to filter them out itself. An unfiltered subscriber still hears every document, and existing terminal filters keep their behavior; a subscriber that selects a terminal and also names documents hears both. (#273, thanks @felixzsh)
+
+### Fixed
+- **A full disk no longer leaves the core unable to start terminals.** Before, new terminals could fail with "registry writer stopped" until the core restarted. Now saving resumes once there is space again, and send, wait and keys keep working meanwhile. While a save fails, `hc run` reports an error even if the program already started: check `hc ls --all` before running it again. Stopping and restarting the core also work on a full disk. (#249, #270, thanks @sundarshahi)
+- **Pasting a big file or screenshot into a terminal on another machine no longer freezes it.** Between updated cores files now travel in pieces, so the terminal and the machine link stay responsive while it sends. Machines on older cores, and pastes relayed through another machine, still send the file in one go.
+- A second core with another state folder no longer takes over a core that is already running on the same socket and ends its programs. (#200, thanks @deepcoldy)
+- After a reconnect, a remote terminal keeps the size of the window you last used, even when you resize or switch windows while it reconnects. (#271, thanks @tiago-peixoto)
+- On Windows, `hc connect` waits for the replies to its requests before it exits when its input ends. (#274, thanks @sundarshahi)
+- A program started on another machine can reach the terminal that started it while its first foreground run is still going. (#264, thanks @JinJieBeWater)
+- The manual says that `hc exec` ends commands after 60 seconds by default. (#262)
 
 ## [0.1.21] - 2026-11-12
 

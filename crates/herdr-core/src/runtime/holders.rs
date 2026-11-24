@@ -396,10 +396,13 @@ impl Core {
                 Ok(Ok(_))
             );
         if taken {
-            eprintln!("core: lost the link to holder {instance}, reconnected");
+            let _ = writeln!(io::stderr(), "core: lost the link to holder {instance}, reconnected");
             return;
         }
-        eprintln!("core: lost the link to holder {instance} for good; its terminals wait for the next core start");
+        let _ = writeln!(
+            io::stderr(),
+            "core: lost the link to holder {instance} for good; its terminals wait for the next core start"
+        );
         // Closed, so the holder sees us leave instead of waiting on a link nobody reads.
         if let Ok(ours) = ours {
             let _ = ours.shutdown(std::net::Shutdown::Both);
