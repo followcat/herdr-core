@@ -1,0 +1,4 @@
+# Captured screens and sweeps are compared as exact text: the detector gets
+# rows joined with "\n" and tests replace/slice on those bytes. A CRLF checkout
+# (core.autocrlf=true on Windows) twists them, so force LF regardless of host.
+crates/herdr-core/tests/fixtures/** text eol=lf
