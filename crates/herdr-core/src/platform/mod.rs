@@ -45,6 +45,8 @@ pub use windows_identity::*;
 #[cfg(target_os = "linux")]
 mod linux_login;
 #[cfg(target_os = "linux")]
+mod manager_env_cache;
+#[cfg(target_os = "linux")]
 pub mod systemd;
 
 /// Only a new SSH-started Linux core imports login settings; holders inherit the core.
@@ -375,7 +377,7 @@ pub async fn program_env() -> std::collections::BTreeMap<String, String> {
     #[cfg(target_os = "linux")]
     {
         env.retain(|k, _| !systemd::SERVICE.contains(&k.as_str()));
-        if let Ok(Some(manager)) = tokio::task::spawn_blocking(systemd::manager_env).await {
+        if let Some(manager) = manager_env_cache::manager_env().await {
             systemd::apply_session(&mut env, &manager);
         }
     }
