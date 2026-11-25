@@ -8,6 +8,7 @@
 - **A terminal's record says who ended it.** `ended_by` names the request, its caller, the client process and the terminal that process ran in (or the parent, core or host shutdown that did it), so `hc get`, `hc ls --all` and `hc events` answer "who killed this" instead of only "killed". `hc rm` deletes the record, so the core also keeps a journal of ends and removals, readable with `hc ended [--since 1h] [--json]`.
 
 ### Fixed
+- **Starting programs on Linux no longer spawns one `busctl` apiece.** The user manager's environment is reused for up to two seconds, while failures are retried sooner.
 - **Screen-detected agents are named.** A status inferred from the screen left `app` empty, so clients showed a silent agent (Command Code, Cline, `cursor-agent`) by its terminal name and `hc ls` by its shell. The inferred record now names the agent the rules matched in `app`, e.g. `command-code`.
 
 ## [0.1.22] - 2026-11-22
