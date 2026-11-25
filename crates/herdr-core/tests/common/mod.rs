@@ -65,18 +65,33 @@ impl Session {
     /// The same CLI compiled as a test target with a numeric version.
     pub fn release() -> Session {
         let mut s = Self::new();
-        let deps = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
-        s.bin = std::fs::read_dir(deps)
-            .unwrap()
-            .flatten()
-            .map(|e| e.path())
+        let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+        let mut dirs = vec![exe_dir.clone()];
+        // Cargo 1.100 gives every test target its own build/<package>/<hash>/out
+        // directory; before, all test executables shared deps/.
+        if exe_dir.file_name().is_some_and(|name| name == "out")
+            && let Some(units) = exe_dir.parent().and_then(|unit| unit.parent())
+        {
+            dirs.extend(
+                std::fs::read_dir(units)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|entry| entry.path().join("out"))
+                    .filter(|path| path.is_dir()),
+            );
+        }
+        s.bin = dirs
+            .iter()
+            .flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten().flatten())
+            .map(|entry| entry.path())
             .filter(|p| {
                 p.is_file()
                     && p.extension().is_none()
                     && p.file_name().unwrap().to_string_lossy().starts_with("release_cli-")
             })
             .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
-            .expect("build the fixture too: cargo test --test release_cli --test <test>");
+            .expect("build the fixture first: cargo test --test release_cli");
         let out = s.hc(&["--version"]);
         assert_eq!(String::from_utf8(out.stdout).unwrap().trim(), format!("hc {}", release_version()));
         s
