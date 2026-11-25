@@ -3,9 +3,6 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Reply {
-    // Only the Linux start-stamp test needs the plain script; `started` is
-    // populated from /proc there and is always None on macOS and Windows.
-    #[cfg(target_os = "linux")]
     Normal,
     Relink,
     Slow,
