@@ -18,9 +18,15 @@ pub fn repository_command() -> Command {
     command.process_group(0);
     unsafe {
         command.pre_exec(|| {
-            for (resource, value) in
-                [(libc::RLIMIT_AS, 512 * 1024 * 1024), (libc::RLIMIT_CPU, 2), (libc::RLIMIT_CORE, 0)]
-            {
+            // A 512 MiB address-space cap fits Linux's git, but macOS arm64
+            // binaries map far more than that before main (dyld's shared cache,
+            // the ObjC runtime), so exec fails with ENOMEM and no git child
+            // ever runs. Keep the cap on Linux; CPU and core are bounded on both.
+            #[cfg(target_os = "linux")]
+            let limits = [(libc::RLIMIT_AS, 512 * 1024 * 1024), (libc::RLIMIT_CPU, 2), (libc::RLIMIT_CORE, 0)];
+            #[cfg(not(target_os = "linux"))]
+            let limits = [(libc::RLIMIT_CPU, 2), (libc::RLIMIT_CORE, 0)];
+            for (resource, value) in limits {
                 let limit = libc::rlimit { rlim_cur: value, rlim_max: value };
                 if libc::setrlimit(resource, &limit) != 0 {
                     return Err(io::Error::last_os_error());
