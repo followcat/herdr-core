@@ -25,7 +25,10 @@ fn adopt_onto(core: &Arc<Core>, root: &std::path::Path, id: u32, previous: &str,
     };
     let mut answer = proto::json_frame(proto::WELCOME, 0, &welcome);
     answer.extend(proto::frame(proto::TAIL, id, tail));
-    let socket = root.join(format!("run/adopt-{}.sock", platform::random_hex()));
+    // 8 hex, not 32: with the full suffix this path is 104 bytes, one over
+    // macOS's 103-byte usable sun_path. The root is already unique per test,
+    // so a short suffix only has to be unique within it.
+    let socket = root.join(format!("run/adopt-{}.sock", &platform::random_hex()[..8]));
     let listener = platform::listen(&socket).unwrap();
     std::thread::spawn(move || {
         let Some(Ok(mut stream)) = listener.incoming().next() else { return };
