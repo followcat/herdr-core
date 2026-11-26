@@ -370,8 +370,8 @@ fn a_root_remote_gets_the_independently_signed_standalone_release() {
     std::fs::create_dir(&tools).unwrap();
     std::fs::write(tools.join("id"), "#!/bin/sh\necho 0\n").unwrap();
     std::fs::set_permissions(tools.join("id"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    let mut local = Session::new();
-    let r = Releases::new(&local, THIS, &[&here()]);
+    let mut local = Session::release();
+    let r = Releases::new(&local, release_version(), &[&here()]);
     let source = local.root.join("Herdr Core.app/Contents/MacOS/herdr-core");
     local.bin = local.root.join(".local/bin/hc");
     std::fs::create_dir_all(local.bin.parent().unwrap()).unwrap();

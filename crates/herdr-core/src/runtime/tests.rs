@@ -348,7 +348,9 @@ async fn a_wait_leaves_nothing_registered_however_it_ends() {
 }
 
 fn test_core() -> (Arc<Core>, PathBuf) {
-    let root = std::env::temp_dir().join(format!("hc-persistence-{}", platform::random_hex()));
+    // Under `test_tmp`, not `temp_dir`: macOS's `$TMPDIR` is long enough that a
+    // `run/*.sock` under it is over SUN_LEN. This is upstream's short-path helper.
+    let root = crate::test_tmp().join(format!("hc-persistence-{}", platform::random_hex()));
     let paths = Paths {
         state: root.join("state"),
         config: root.join("config.toml"),
