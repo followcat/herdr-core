@@ -88,6 +88,20 @@ fn bare_names_follow_standalone_and_embedded_container_semantics() {
 }
 
 #[test]
+fn plain_labels_use_home_however_the_same_folder_is_spelled() {
+    // A foreground process's cwd is read from the OS, which resolves symlinks
+    // (macOS reports /private/var/... for /var/...), while HOME keeps the
+    // caller's spelling. The home folder must still label as "~".
+    let s = session();
+    let real = s.root.join("real-home");
+    fs::create_dir_all(&real).unwrap();
+    let link = s.root.join("link-home");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    assert_eq!(discover(&link, Some(&real)).unwrap().auto_label, "~");
+    assert_eq!(discover(&real, Some(&link)).unwrap().auto_label, "~");
+}
+
+#[test]
 fn invalid_markers_do_not_hide_a_parent_repo_and_plain_labels_use_home() {
     let s = session();
     assert_eq!(discover(&s.root, Some(&s.root)).unwrap().auto_label, "~");

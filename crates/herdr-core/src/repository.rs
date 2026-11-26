@@ -224,5 +224,9 @@ fn basename(path: &Path) -> Option<String> {
 }
 
 fn fallback(cwd: &Path, home: Option<&Path>) -> String {
-    if home == Some(cwd) { "~".into() } else { basename(cwd).unwrap_or_else(|| cwd.to_string_lossy().into_owned()) }
+    // The OS reports a process's cwd with symlinks resolved (macOS: /private/var
+    // for /var), while HOME keeps the caller's spelling. Compare the real
+    // folders so the home directory labels as "~" either way.
+    let is_home = home.is_some_and(|home| canonical(home) == canonical(cwd));
+    if is_home { "~".into() } else { basename(cwd).unwrap_or_else(|| cwd.to_string_lossy().into_owned()) }
 }
